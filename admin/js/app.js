@@ -1,0 +1,413 @@
+// UniStudent Admin Dashboard - JavaScript Controller
+
+document.addEventListener('DOMContentLoaded', () => {
+  initNavigation();
+  initCharts();
+  initQRCode();
+  initFilterAndSearch();
+  initScheduleViews();
+});
+
+// 1. Navigation & Tab Switching
+function initNavigation() {
+  const navLinks = document.querySelectorAll('.nav-link-custom[data-target]');
+  const sections = document.querySelectorAll('.page-section');
+  const pageTitle = document.getElementById('current-page-title');
+
+  const titleMap = {
+    'section-dashboard': 'Tổng quan hệ thống',
+    'section-users': 'Quản lý người dùng & Sinh viên',
+    'section-schedules': 'Quản lý Lịch học & Lịch thi',
+    'section-attendance': 'Quản lý Điểm danh & Tạo mã QR',
+    'section-lost-found': 'Quản lý Tin tìm đồ thất lạc',
+    'section-market': 'Quản lý Chợ sinh viên nội bộ'
+  };
+
+  navLinks.forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const targetId = link.getAttribute('data-target');
+
+      // Update active nav
+      navLinks.forEach(l => l.classList.remove('active'));
+      link.classList.add('active');
+
+      // Show target section
+      sections.forEach(sec => sec.classList.add('d-none'));
+      const activeSection = document.getElementById(targetId);
+      if (activeSection) {
+        activeSection.classList.remove('d-none');
+      }
+
+      // Update Header Title
+      if (pageTitle && titleMap[targetId]) {
+        pageTitle.innerText = titleMap[targetId];
+      }
+
+      // If mobile, close sidebar
+      const sidebar = document.getElementById('sidebar');
+      if (window.innerWidth < 992 && sidebar) {
+        sidebar.classList.remove('show');
+      }
+    });
+  });
+
+  // Mobile menu toggle
+  const menuToggle = document.getElementById('menuToggle');
+  const sidebar = document.getElementById('sidebar');
+  if (menuToggle && sidebar) {
+    menuToggle.addEventListener('click', () => {
+      sidebar.classList.toggle('show');
+    });
+  }
+}
+
+// 2. Dashboard Analytics Charts (Chart.js)
+let attendanceChart = null;
+let lostFoundChart = null;
+
+function initCharts() {
+  const attCanvas = document.getElementById('attendanceWeeklyChart');
+  if (attCanvas) {
+    const ctx = attCanvas.getContext('2d');
+    attendanceChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'],
+        datasets: [{
+          label: 'Tỷ lệ sinh viên có mặt (%)',
+          data: [96.5, 94.2, 91.8, 97.0, 93.5, 89.2],
+          borderColor: '#4f46e5',
+          backgroundColor: 'rgba(79, 70, 229, 0.1)',
+          fill: true,
+          tension: 0.35,
+          borderWidth: 3,
+          pointBackgroundColor: '#4f46e5',
+          pointRadius: 5
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          y: {
+            min: 80,
+            max: 100,
+            ticks: { callback: (val) => val + '%' }
+          }
+        }
+      }
+    });
+  }
+
+  const categoryCanvas = document.getElementById('categoryPieChart');
+  if (categoryCanvas) {
+    const ctx2 = categoryCanvas.getContext('2d');
+    lostFoundChart = new Chart(ctx2, {
+      type: 'doughnut',
+      data: {
+        labels: ['Ví / Thẻ SV', 'Điện thoại / Laptop', 'Chìa khóa / Xe', 'Đồ cá nhân khác'],
+        datasets: [{
+          data: [42, 28, 18, 12],
+          backgroundColor: ['#4f46e5', '#0ea5e9', '#f59e0b', '#94a3b8'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom' }
+        }
+      }
+    });
+  }
+}
+
+// 3. Dynamic QR Code Generator for Attendance
+let qrCountdownInterval = null;
+let qrCodeInstance = null;
+let currentRemainingTime = 30;
+
+function initQRCode() {
+  const qrTarget = document.getElementById('qrcode-display');
+  const timerDisplay = document.getElementById('qr-countdown-text');
+  const progressBar = document.getElementById('qr-progress-bar');
+  const btnRefreshQR = document.getElementById('btn-refresh-qr');
+
+  if (!qrTarget) return;
+
+  function generateNewQR() {
+    const timestamp = Date.now();
+    const token = 'ATTEND_' + Math.random().toString(36).substring(2, 9).toUpperCase() + '_' + timestamp;
+    
+    // Clear old QR
+    qrTarget.innerHTML = '';
+    
+    // Render QR Code using QRCode library
+    if (typeof QRCode !== 'undefined') {
+      qrCodeInstance = new QRCode(qrTarget, {
+        text: `unistudent://checkin?code=${token}`,
+        width: 190,
+        height: 190,
+        colorDark: '#1e1b4b',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.H
+      });
+    }
+
+    currentRemainingTime = 30;
+    updateTimer();
+  }
+
+  function updateTimer() {
+    clearInterval(qrCountdownInterval);
+    qrCountdownInterval = setInterval(() => {
+      currentRemainingTime--;
+      if (timerDisplay) {
+        timerDisplay.innerText = `${currentRemainingTime}s`;
+      }
+      if (progressBar) {
+        const percent = (currentRemainingTime / 30) * 100;
+        progressBar.style.width = `${percent}%`;
+        if (percent < 30) {
+          progressBar.className = 'progress-bar bg-danger';
+        } else if (percent < 60) {
+          progressBar.className = 'progress-bar bg-warning';
+        } else {
+          progressBar.className = 'progress-bar bg-success';
+        }
+      }
+
+      if (currentRemainingTime <= 0) {
+        generateNewQR();
+        simulateRealtimeCheckin();
+      }
+    }, 1000);
+  }
+
+  if (btnRefreshQR) {
+    btnRefreshQR.addEventListener('click', () => {
+      generateNewQR();
+      showToast('Đã làm mới mã QR điểm danh!');
+    });
+  }
+
+  // Initial trigger
+  generateNewQR();
+}
+
+// Simulate a student scanning QR in real time
+function simulateRealtimeCheckin() {
+  const tableBody = document.getElementById('live-attendance-list');
+  if (!tableBody) return;
+
+  const mockStudents = [
+    { id: '21050189', name: 'Nguyễn Văn An', class: 'D19-CNTT01', room: 'A2-301' },
+    { id: '21050234', name: 'Trần Thị Mai', class: 'D19-CNTT02', room: 'A2-301' },
+    { id: '21050302', name: 'Lê Hoàng Nam', class: 'D19-CNTT01', room: 'A2-301' },
+    { id: '21050411', name: 'Phạm Minh Đức', class: 'D19-CNTT03', room: 'A2-301' }
+  ];
+
+  const randomStudent = mockStudents[Math.floor(Math.random() * mockStudents.length)];
+  const now = new Date();
+  const timeString = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+  const row = document.createElement('tr');
+  row.className = 'table-success fade-in-row';
+  row.innerHTML = `
+    <td><strong>${randomStudent.id}</strong></td>
+    <td>
+      <div class="d-flex align-items-center gap-2">
+        <div class="avatar-sm bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width:28px;height:28px;font-size:11px;font-weight:700">
+          ${randomStudent.name.charAt(0)}
+        </div>
+        <span>${randomStudent.name}</span>
+      </div>
+    </td>
+    <td>${randomStudent.class}</td>
+    <td>${timeString}</td>
+    <td><span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-circle-fill me-1"></i>Hợp lệ (QR)</span></td>
+  `;
+
+  tableBody.insertBefore(row, tableBody.firstChild);
+  if (tableBody.children.length > 8) {
+    tableBody.removeChild(tableBody.lastChild);
+  }
+}
+
+// 4. Interactive Search and Action Filters
+function initFilterAndSearch() {
+  const userSearchInput = document.getElementById('userSearchInput');
+  if (userSearchInput) {
+    userSearchInput.addEventListener('keyup', (e) => {
+      const query = e.target.value.toLowerCase();
+      const rows = document.querySelectorAll('#userTableBody tr');
+      rows.forEach(r => {
+        const text = r.innerText.toLowerCase();
+        r.style.display = text.includes(query) ? '' : 'none';
+      });
+    });
+  }
+}
+
+// 5. Schedule Management: Month-Year Picker & Day/Week/Month Views
+let currentSelectedYear = 2026;
+let currentSelectedMonth = 11;
+
+function initScheduleViews() {
+  // A. Segmented switcher [ Ngày | Tuần | Tháng | Dạng bảng ]
+  const segmentedBtns = document.querySelectorAll('#scheduleSegmentedNav .nav-btn');
+  const subviews = document.querySelectorAll('.schedule-subview');
+
+  if (segmentedBtns.length) {
+    segmentedBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetSubviewId = btn.getAttribute('data-subview');
+
+        segmentedBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        subviews.forEach(view => view.classList.add('d-none'));
+        const activeView = document.getElementById(targetSubviewId);
+        if (activeView) {
+          activeView.classList.remove('d-none');
+        }
+      });
+    });
+  }
+
+  // B. Month-Year Picker Popup Logic (Chuẩn như ảnh 1)
+  const pickerBtn = document.getElementById('monthYearPickerBtn');
+  const pickerPopup = document.getElementById('monthYearPickerPopup');
+  const pickerYearDisplay = document.getElementById('pickerYearDisplay');
+  const prevYearBtn = document.getElementById('prevYearBtn');
+  const nextYearBtn = document.getElementById('nextYearBtn');
+  const currentMonthYearLabel = document.getElementById('currentMonthYearLabel');
+  const monthBtns = document.querySelectorAll('.month-btn-item');
+
+  if (pickerBtn && pickerPopup) {
+    pickerBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      pickerPopup.classList.toggle('show');
+    });
+
+    // Close when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!pickerPopup.contains(e.target) && e.target !== pickerBtn) {
+        pickerPopup.classList.remove('show');
+      }
+    });
+
+    // Year navigation
+    if (prevYearBtn && nextYearBtn && pickerYearDisplay) {
+      prevYearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        currentSelectedYear--;
+        pickerYearDisplay.innerText = currentSelectedYear;
+        updateMonthYearDisplay();
+      });
+
+      nextYearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        currentSelectedYear++;
+        pickerYearDisplay.innerText = currentSelectedYear;
+        updateMonthYearDisplay();
+      });
+    }
+
+    // Month selection
+    monthBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        monthBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentSelectedMonth = parseInt(btn.getAttribute('data-month'), 10);
+        updateMonthYearDisplay();
+        pickerPopup.classList.remove('show');
+        showToast(`Đã chọn tháng ${currentSelectedMonth}, năm ${currentSelectedYear}`);
+      });
+    });
+  }
+
+  function updateMonthYearDisplay() {
+    if (currentMonthYearLabel) {
+      currentMonthYearLabel.innerText = `tháng ${currentSelectedMonth}, ${currentSelectedYear}`;
+    }
+    const monthHeader = document.getElementById('monthGridHeaderTitle');
+    if (monthHeader) {
+      monthHeader.innerText = `Tháng ${currentSelectedMonth}, ${currentSelectedYear}`;
+    }
+  }
+
+  // C. Week Day Strip click handler (Interactive day switcher)
+  const weekItems = document.querySelectorAll('.week-day-item');
+  const weekTimelineBadge = document.getElementById('weekTimelineBadge');
+  const dayScheduleContainers = document.querySelectorAll('.day-schedule-content');
+
+  weekItems.forEach(item => {
+    item.addEventListener('click', () => {
+      weekItems.forEach(w => w.classList.remove('active'));
+      item.classList.add('active');
+
+      const selectedDayKey = item.getAttribute('data-day-key');
+      const selectedDayLabel = item.getAttribute('data-day-label');
+
+      if (weekTimelineBadge && selectedDayLabel) {
+        weekTimelineBadge.innerText = selectedDayLabel;
+      }
+
+      // Show matching schedule cards
+      if (dayScheduleContainers.length) {
+        dayScheduleContainers.forEach(c => c.classList.add('d-none'));
+        const matched = document.getElementById('schedule-for-' + selectedDayKey);
+        if (matched) {
+          matched.classList.remove('d-none');
+        } else {
+          const empty = document.getElementById('schedule-for-empty');
+          if (empty) empty.classList.remove('d-none');
+        }
+      }
+    });
+  });
+
+  // D. Month Day Cell click handler
+  const monthCells = document.querySelectorAll('.month-day-cell');
+  monthCells.forEach(cell => {
+    cell.addEventListener('click', () => {
+      monthCells.forEach(c => c.classList.remove('active-day'));
+      cell.classList.add('active-day');
+      const dateText = cell.getAttribute('data-date');
+      if (dateText) {
+        showToast('Đã chọn ngày: ' + dateText);
+      }
+    });
+  });
+}
+
+// Helper: Toast notification
+function showToast(message) {
+  const toastContainer = document.getElementById('toast-container');
+  if (!toastContainer) return;
+
+  const toastEl = document.createElement('div');
+  toastEl.className = 'toast align-items-center text-white bg-dark border-0 show shadow';
+  toastEl.role = 'alert';
+  toastEl.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body d-flex align-items-center gap-2">
+        <i class="bi bi-info-circle-fill text-primary"></i>
+        <span>${message}</span>
+      </div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  `;
+
+  toastContainer.appendChild(toastEl);
+  setTimeout(() => {
+    toastEl.remove();
+  }, 3500);
+}
