@@ -875,7 +875,9 @@ function initScheduleViews() {
 // =========================================================================
 
 function initAddScheduleModal() {
+  const modalEl = document.getElementById('addScheduleModal');
   const form = document.getElementById('formAddSchedule');
+  const typeSelector = document.getElementById('scheduleTypeSelector');
   const typeBtns = document.querySelectorAll('.schedule-type-btn');
   const deptSelect = document.getElementById('modalSelectDept');
   const courseSelect = document.getElementById('modalSelectCourse');
@@ -884,6 +886,7 @@ function initAddScheduleModal() {
   const buildingSelect = document.getElementById('modalSelectBuilding');
   const roomSelect = document.getElementById('modalSelectRoom');
 
+  const timeGroupEmptyHint = document.getElementById('timeGroupEmptyHint');
   const timeGroupRegular = document.getElementById('timeGroupRegular');
   const timeGroupSpecific = document.getElementById('timeGroupSpecific');
   const examOnlyFields = document.querySelectorAll('.exam-only-field');
@@ -900,131 +903,326 @@ function initAddScheduleModal() {
   const minuteInput = document.getElementById('examMinuteInput');
   const previewBadge = document.getElementById('examTimeBadgePreview');
 
-  let currentScheduleType = 'regular_class'; // 'regular_class' | 'exam'
+  const alertBox = document.getElementById('modalConflictAlert');
+  const alertMsg = document.getElementById('modalConflictMessage');
+  const alertIcon = document.getElementById('modalConflictIcon');
+  const submitBtn = document.getElementById('btnSubmitAddSchedule');
+
+  let currentScheduleType = null; // Bắt đầu chưa chọn loại lịch nào
 
   if (!deptSelect || !courseSelect) return;
 
-  // 1. Populate Periods 1..12
-  if (regularFromPeriod && regularToPeriod) {
-    regularFromPeriod.innerHTML = '';
-    regularToPeriod.innerHTML = '';
-    for (let p = 1; p <= 12; p++) {
-      regularFromPeriod.innerHTML += `<option value="${p}" ${p === 1 ? 'selected' : ''}>Tiết ${p}</option>`;
-      regularToPeriod.innerHTML += `<option value="${p}" ${p === 4 ? 'selected' : ''}>Tiết ${p}</option>`;
+  // Helper: Xóa lỗi của một trường
+  function clearFieldError(inputEl, errorId) {
+    if (inputEl) {
+      inputEl.classList.remove('is-invalid');
+    }
+    const errEl = document.getElementById(errorId);
+    if (errEl) {
+      errEl.classList.add('d-none');
     }
   }
 
-  // 2. Populate Departments
-  deptSelect.innerHTML = MOCK_DATA.departments.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
-
-  // 3. Populate Buildings
-  buildingSelect.innerHTML = MOCK_DATA.buildings.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
-
-  // 4. Cascading Updates (Khoa -> Môn học & Giảng viên)
-  function updateCoursesAndTeachers() {
-    const deptId = deptSelect.value || 'cntt';
-    const courses = MOCK_DATA.courses[deptId] || [];
-    const teachers = MOCK_DATA.teachers[deptId] || [];
-
-    courseSelect.innerHTML = courses.map(c => `<option value="${c}">${c}</option>`).join('');
-    teacherSelect.innerHTML = teachers.map(t => `<option value="${t}">${t}</option>`).join('');
-
-    autoSelectTeacherForCourse();
-    triggerConflictCheck();
-  }
-
-  function autoSelectTeacherForCourse() {
-    const courseName = courseSelect.value;
-    const defaultTeacher = MOCK_DATA.defaultTeachers[courseName];
-    if (defaultTeacher) {
-      teacherSelect.value = defaultTeacher;
+  // Helper: Hiển thị lỗi của một trường
+  function setFieldError(inputEl, errorId, msg) {
+    if (inputEl) {
+      inputEl.classList.add('is-invalid');
     }
-    triggerConflictCheck();
+    const errEl = document.getElementById(errorId);
+    if (errEl) {
+      if (msg) errEl.innerHTML = `<i class="bi bi-exclamation-circle-fill"></i> ${msg}`;
+      errEl.classList.remove('d-none');
+    }
+    return inputEl;
   }
 
-  function updateRooms() {
-    const buildingId = buildingSelect.value || 'toa_a';
-    const rooms = MOCK_DATA.rooms[buildingId] || [];
+  // 1. Reset Modal State về Trắng hoàn toàn
+  function resetModalState() {
+    // A. Xóa toàn bộ trạng thái lỗi
+    document.querySelectorAll('#formAddSchedule .is-invalid').forEach(el => el.classList.remove('is-invalid'));
+    document.querySelectorAll('#formAddSchedule .field-error-msg').forEach(el => el.classList.add('d-none'));
 
-    roomSelect.innerHTML = rooms.map(r => `
-      <option value="${r.name}">${r.name}</option>
-    `).join('');
+    // B. Reset Loại lịch: Không chọn sẵn nút nào
+    currentScheduleType = null;
+    typeBtns.forEach(b => b.classList.remove('active'));
+    if (timeGroupEmptyHint) timeGroupEmptyHint.classList.remove('d-none');
+    if (timeGroupRegular) timeGroupRegular.classList.add('d-none');
+    if (timeGroupSpecific) timeGroupSpecific.classList.add('d-none');
+    examOnlyFields.forEach(el => el.classList.add('d-none'));
+    if (teacherLabel) teacherLabel.innerHTML = 'Giảng viên phụ trách <span class="text-danger">*</span>';
 
-    triggerConflictCheck();
+    // C. Reset Khoa, Môn học, Giảng viên (Disabled chờ chọn Khoa)
+    deptSelect.innerHTML = '<option value="" selected disabled>-- Chọn Khoa / Viện --</option>' +
+      MOCK_DATA.departments.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+    deptSelect.value = '';
+
+    courseSelect.innerHTML = '<option value="" selected disabled>-- Vui lòng chọn Khoa trước --</option>';
+    courseSelect.value = '';
+    courseSelect.disabled = true;
+
+    teacherSelect.innerHTML = '<option value="" selected disabled>-- Vui lòng chọn Khoa trước --</option>';
+    teacherSelect.value = '';
+    teacherSelect.disabled = true;
+
+    // D. Reset Tòa nhà & Phòng (Disabled chờ chọn Tòa nhà)
+    buildingSelect.innerHTML = '<option value="" selected disabled>-- Chọn Tòa nhà --</option>' +
+      MOCK_DATA.buildings.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+    buildingSelect.value = '';
+
+    roomSelect.innerHTML = '<option value="" selected disabled>-- Vui lòng chọn Tòa nhà trước --</option>';
+    roomSelect.value = '';
+    roomSelect.disabled = true;
+
+    // E. Reset Thời gian lịch học
+    if (regularDaySelect) {
+      regularDaySelect.value = '';
+    }
+
+    if (regularFromPeriod) {
+      regularFromPeriod.innerHTML = '<option value="" selected disabled>-- Từ tiết --</option>';
+      for (let p = 1; p <= 12; p++) {
+        regularFromPeriod.innerHTML += `<option value="${p}">Tiết ${p}</option>`;
+      }
+      regularFromPeriod.value = '';
+    }
+
+    if (regularToPeriod) {
+      regularToPeriod.innerHTML = '<option value="" selected disabled>-- Chọn Từ tiết trước --</option>';
+      regularToPeriod.value = '';
+      regularToPeriod.disabled = true;
+    }
+
+    if (regularTimeDisplay) regularTimeDisplay.value = '-- : --';
+    if (regularStartDate) regularStartDate.value = '';
+    if (regularEndDate) regularEndDate.value = '';
+
+    // F. Reset Thời gian lịch thi
+    if (specificDate) specificDate.value = '';
+    if (hourInput) hourInput.value = '';
+    if (minuteInput) minuteInput.value = '';
+    if (previewBadge) previewBadge.innerText = '--h--';
+
+    // G. Reset Hộp cảnh báo trùng lịch: Ẩn đi hoàn toàn
+    if (alertBox) alertBox.classList.add('d-none');
+    if (submitBtn) {
+      submitBtn.innerHTML = '<i class="bi bi-plus-circle me-1"></i> Thêm Lịch Mới';
+      submitBtn.className = 'btn btn-primary-custom px-4 fw-bold shadow-sm';
+    }
   }
 
-  deptSelect.addEventListener('change', updateCoursesAndTeachers);
-  courseSelect.addEventListener('change', autoSelectTeacherForCourse);
-  buildingSelect.addEventListener('change', updateRooms);
-  teacherSelect.addEventListener('change', triggerConflictCheck);
-  roomSelect.addEventListener('change', triggerConflictCheck);
+  // Lắng nghe sự kiện modal mở (Bootstrap show.bs.modal)
+  if (modalEl) {
+    modalEl.addEventListener('show.bs.modal', resetModalState);
+  }
 
-  // 5. Schedule Type Switcher (Chỉ 2 nút: Lịch học định kỳ & Lịch thi)
+  // 2. Chuyển đổi Loại lịch (Người dùng click chủ động)
   typeBtns.forEach(btn => {
     btn.addEventListener('click', () => {
       typeBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-
       currentScheduleType = btn.getAttribute('data-type');
+      clearFieldError(typeSelector, 'errorScheduleType');
+
+      if (timeGroupEmptyHint) timeGroupEmptyHint.classList.add('d-none');
 
       if (currentScheduleType === 'exam') {
-        // Chế độ Lịch thi
         teacherLabel.innerHTML = '<i class="bi bi-shield-check me-1 text-success"></i> Cán bộ coi thi / Giám thị <span class="text-danger">*</span>';
         examOnlyFields.forEach(el => el.classList.remove('d-none'));
         timeGroupRegular.classList.add('d-none');
         timeGroupSpecific.classList.remove('d-none');
 
-        // Gợi ý phòng thi tiêu chuẩn
-        buildingSelect.value = 'toa_a';
-        updateRooms();
-        roomSelect.value = 'A404';
+        // Cập nhật nhãn placeholder cho teacherSelect nếu đã chọn khoa
+        if (deptSelect.value) {
+          const deptId = deptSelect.value;
+          const teachers = MOCK_DATA.teachers[deptId] || [];
+          const curVal = teacherSelect.value;
+          teacherSelect.innerHTML = '<option value="" selected disabled>-- Chọn Cán bộ coi thi --</option>' +
+            teachers.map(t => `<option value="${t}">${t}</option>`).join('');
+          if (curVal) teacherSelect.value = curVal;
+        }
       } else {
-        // Chế độ Lịch học định kỳ
         teacherLabel.innerHTML = 'Giảng viên phụ trách <span class="text-danger">*</span>';
         examOnlyFields.forEach(el => el.classList.add('d-none'));
         timeGroupRegular.classList.remove('d-none');
         timeGroupSpecific.classList.add('d-none');
+
+        if (deptSelect.value) {
+          const deptId = deptSelect.value;
+          const teachers = MOCK_DATA.teachers[deptId] || [];
+          const curVal = teacherSelect.value;
+          teacherSelect.innerHTML = '<option value="" selected disabled>-- Chọn Giảng viên --</option>' +
+            teachers.map(t => `<option value="${t}">${t}</option>`).join('');
+          if (curVal) teacherSelect.value = curVal;
+        }
       }
 
       triggerConflictCheck();
     });
   });
 
-  // 6. Time Range Calculation & Sync
-  function updateRegularTime() {
-    let fromP = parseInt(regularFromPeriod.value, 10);
-    let toP = parseInt(regularToPeriod.value, 10);
-    if (toP < fromP) {
-      regularToPeriod.value = fromP;
-      toP = fromP;
+  // 3. Thao tác tuần tự: Khoa -> Môn học & Giảng viên
+  deptSelect.addEventListener('change', () => {
+    const deptId = deptSelect.value;
+    clearFieldError(deptSelect, 'errorDept');
+
+    if (!deptId) {
+      courseSelect.disabled = true;
+      courseSelect.innerHTML = '<option value="" selected disabled>-- Vui lòng chọn Khoa trước --</option>';
+      courseSelect.value = '';
+
+      teacherSelect.disabled = true;
+      teacherSelect.innerHTML = '<option value="" selected disabled>-- Vui lòng chọn Khoa trước --</option>';
+      teacherSelect.value = '';
+    } else {
+      const courses = MOCK_DATA.courses[deptId] || [];
+      const teachers = MOCK_DATA.teachers[deptId] || [];
+
+      courseSelect.disabled = false;
+      courseSelect.innerHTML = '<option value="" selected disabled>-- Chọn Môn học --</option>' +
+        courses.map(c => `<option value="${c}">${c}</option>`).join('');
+      courseSelect.value = '';
+      clearFieldError(courseSelect, 'errorCourse');
+
+      teacherSelect.disabled = false;
+      const tPlaceholder = currentScheduleType === 'exam' ? '-- Chọn Cán bộ coi thi --' : '-- Chọn Giảng viên --';
+      teacherSelect.innerHTML = `<option value="" selected disabled>${tPlaceholder}</option>` +
+        teachers.map(t => `<option value="${t}">${t}</option>`).join('');
+      teacherSelect.value = '';
+      clearFieldError(teacherSelect, 'errorTeacher');
     }
-    regularTimeDisplay.value = calculatePeriodTime(fromP, toP);
+
     triggerConflictCheck();
-  }
+  });
 
-  regularFromPeriod.addEventListener('change', updateRegularTime);
-  regularToPeriod.addEventListener('change', updateRegularTime);
-  regularDaySelect.addEventListener('change', triggerConflictCheck);
+  courseSelect.addEventListener('change', () => {
+    clearFieldError(courseSelect, 'errorCourse');
+    const courseName = courseSelect.value;
+    // Gợi ý giảng viên phụ trách nếu có và chưa chọn
+    const defaultTeacher = MOCK_DATA.defaultTeachers[courseName];
+    if (defaultTeacher && (!teacherSelect.value || teacherSelect.value === '')) {
+      for (let i = 0; i < teacherSelect.options.length; i++) {
+        if (teacherSelect.options[i].value === defaultTeacher) {
+          teacherSelect.value = defaultTeacher;
+          clearFieldError(teacherSelect, 'errorTeacher');
+          break;
+        }
+      }
+    }
+    triggerConflictCheck();
+  });
 
-  // 7. Exam Time Input Auto-jump (Nhập 12 rồi tự chuyển qua phút 30 -> 12h30)
+  teacherSelect.addEventListener('change', () => {
+    clearFieldError(teacherSelect, 'errorTeacher');
+    triggerConflictCheck();
+  });
+
+  // 4. Thao tác tuần tự: Tòa nhà -> Phòng
+  buildingSelect.addEventListener('change', () => {
+    const buildingId = buildingSelect.value;
+    clearFieldError(buildingSelect, 'errorBuilding');
+
+    if (!buildingId) {
+      roomSelect.disabled = true;
+      roomSelect.innerHTML = '<option value="" selected disabled>-- Vui lòng chọn Tòa nhà trước --</option>';
+      roomSelect.value = '';
+    } else {
+      const rooms = MOCK_DATA.rooms[buildingId] || [];
+      roomSelect.disabled = false;
+      roomSelect.innerHTML = '<option value="" selected disabled>-- Chọn Phòng --</option>' +
+        rooms.map(r => `<option value="${r.name}">${r.name}</option>`).join('');
+      roomSelect.value = '';
+      clearFieldError(roomSelect, 'errorRoom');
+    }
+
+    triggerConflictCheck();
+  });
+
+  roomSelect.addEventListener('change', () => {
+    clearFieldError(roomSelect, 'errorRoom');
+    triggerConflictCheck();
+  });
+
+  // 5. Thao tác tuần tự thời gian: Thứ, Từ tiết -> Đến tiết -> Khung giờ
+  regularDaySelect.addEventListener('change', () => {
+    clearFieldError(regularDaySelect, 'errorRegularDay');
+    triggerConflictCheck();
+  });
+
+  regularFromPeriod.addEventListener('change', () => {
+    clearFieldError(regularFromPeriod, 'errorRegularFrom');
+    const fromVal = parseInt(regularFromPeriod.value, 10);
+
+    if (isNaN(fromVal)) {
+      regularToPeriod.disabled = true;
+      regularToPeriod.innerHTML = '<option value="" selected disabled>-- Chọn Từ tiết trước --</option>';
+      regularToPeriod.value = '';
+      regularTimeDisplay.value = '-- : --';
+    } else {
+      regularToPeriod.disabled = false;
+      regularToPeriod.innerHTML = '<option value="" selected disabled>-- Đến tiết --</option>';
+      for (let p = fromVal; p <= 12; p++) {
+        regularToPeriod.innerHTML += `<option value="${p}">Tiết ${p}</option>`;
+      }
+      regularToPeriod.value = '';
+      regularTimeDisplay.value = '-- : --';
+      clearFieldError(regularToPeriod, 'errorRegularTo');
+    }
+
+    triggerConflictCheck();
+  });
+
+  regularToPeriod.addEventListener('change', () => {
+    clearFieldError(regularToPeriod, 'errorRegularTo');
+    const fromVal = parseInt(regularFromPeriod.value, 10);
+    const toVal = parseInt(regularToPeriod.value, 10);
+
+    if (!isNaN(fromVal) && !isNaN(toVal)) {
+      regularTimeDisplay.value = calculatePeriodTime(fromVal, toVal);
+    } else {
+      regularTimeDisplay.value = '-- : --';
+    }
+
+    triggerConflictCheck();
+  });
+
+  regularStartDate.addEventListener('change', () => {
+    clearFieldError(regularStartDate, 'errorRegularStart');
+    if (regularEndDate.value && regularStartDate.value && regularEndDate.value < regularStartDate.value) {
+      setFieldError(regularEndDate, 'errorRegularEnd', 'Ngày kết thúc phải sau hoặc bằng ngày bắt đầu');
+    } else {
+      clearFieldError(regularEndDate, 'errorRegularEnd');
+    }
+  });
+
+  regularEndDate.addEventListener('change', () => {
+    clearFieldError(regularEndDate, 'errorRegularEnd');
+    if (regularEndDate.value && regularStartDate.value && regularEndDate.value < regularStartDate.value) {
+      setFieldError(regularEndDate, 'errorRegularEnd', 'Ngày kết thúc phải sau hoặc bằng ngày bắt đầu');
+    }
+  });
+
+  // 6. Nhập giờ thi (Lịch thi)
+  specificDate.addEventListener('change', () => {
+    clearFieldError(specificDate, 'errorSpecificDate');
+    triggerConflictCheck();
+  });
+
   function getFormattedExamTime() {
-    if (!hourInput || !minuteInput) return '12h30';
+    if (!hourInput || !minuteInput) return '';
     let h = hourInput.value.replace(/\D/g, '');
     let m = minuteInput.value.replace(/\D/g, '');
-
-    if (!h) h = '12';
-    if (!m) m = '30';
-
-    h = h.padStart(2, '0');
-    m = m.padStart(2, '0');
-
-    return `${h}h${m}`;
+    if (h.length === 0 || m.length === 0) return '';
+    return `${h.padStart(2, '0')}h${m.padStart(2, '0')}`;
   }
 
   function updateExamTimeBadge() {
-    if (!hourInput || !minuteInput || !previewBadge) return;
     const formatted = getFormattedExamTime();
-    previewBadge.innerText = formatted;
+    if (formatted) {
+      previewBadge.innerText = formatted;
+      clearFieldError(document.getElementById('examTimeInputGroup'), 'errorExamTime');
+    } else {
+      previewBadge.innerText = '--h--';
+    }
     triggerConflictCheck();
   }
 
@@ -1032,8 +1230,9 @@ function initAddScheduleModal() {
     hourInput.addEventListener('input', () => {
       hourInput.value = hourInput.value.replace(/\D/g, '');
       const val = hourInput.value;
-
-      // Nhập đủ 2 số hoặc số >= 3 (như 3, 4... 9) thì tự nhảy sang ô phút
+      if (parseInt(val, 10) > 23) {
+        hourInput.value = '23';
+      }
       if (val.length === 2 || (val.length === 1 && parseInt(val, 10) >= 3)) {
         if (val.length === 1) {
           hourInput.value = '0' + val;
@@ -1046,48 +1245,67 @@ function initAddScheduleModal() {
 
     minuteInput.addEventListener('input', () => {
       minuteInput.value = minuteInput.value.replace(/\D/g, '');
+      const val = minuteInput.value;
+      if (parseInt(val, 10) > 59) {
+        minuteInput.value = '59';
+      }
       updateExamTimeBadge();
     });
 
     minuteInput.addEventListener('keydown', (e) => {
-      // Phím Backspace khi ô phút trống thì nhảy lùi về ô giờ
       if (e.key === 'Backspace' && minuteInput.value.length === 0) {
         hourInput.focus();
       }
     });
   }
 
-  if (specificDate) {
-    specificDate.addEventListener('change', triggerConflictCheck);
-  }
-
-  // 8. Realtime Conflict Checking Logic
+  // 7. Logic kiểm tra trùng lịch (CHỈ CHẠY KHI ĐÃ ĐỦ THÔNG TIN LIÊN QUAN)
   function triggerConflictCheck() {
-    const alertBox = document.getElementById('modalConflictAlert');
-    const alertMsg = document.getElementById('modalConflictMessage');
-    const alertIcon = document.getElementById('modalConflictIcon');
-    const submitBtn = document.getElementById('btnSubmitAddSchedule');
+    if (!alertBox || !alertMsg || !alertIcon) return;
 
-    if (!alertBox || !alertMsg) return;
+    // Yêu cầu 4: Chỉ kiểm tra trùng lịch sau khi đã chọn đủ thông tin liên quan
+    if (!currentScheduleType) {
+      alertBox.classList.add('d-none');
+      return;
+    }
 
     const selectedRoom = roomSelect.value;
     const selectedTeacher = teacherSelect.value;
-    let targetDayKey = 'th4';
+
+    // Phải có ít nhất phòng hoặc giảng viên
+    if (!selectedRoom && !selectedTeacher) {
+      alertBox.classList.add('d-none');
+      return;
+    }
+
+    let targetDayKey = null;
 
     if (currentScheduleType === 'regular_class') {
+      // Với lịch học: cần chọn đủ Thứ, Từ tiết, Đến tiết
+      if (!regularDaySelect.value || !regularFromPeriod.value || !regularToPeriod.value) {
+        alertBox.classList.add('d-none');
+        return;
+      }
       targetDayKey = convertDayNameToKey(regularDaySelect.value);
     } else {
+      // Với lịch thi: cần chọn Ngày thi và nhập đủ Giờ thi
+      if (!specificDate.value || !hourInput.value || !minuteInput.value) {
+        alertBox.classList.add('d-none');
+        return;
+      }
       targetDayKey = convertDateToDayKey(specificDate.value);
     }
 
+    // Đã chọn đủ thông tin -> Hiển thị hộp kiểm tra và so khớp
+    alertBox.classList.remove('d-none');
     const conflicts = [];
 
     schedulesData.forEach(s => {
       if (s.dayKey === targetDayKey && s.type !== 'canceled') {
-        if (s.room === selectedRoom) {
+        if (selectedRoom && s.room === selectedRoom) {
           conflicts.push(`Phòng [${s.room}] đã có lịch "${s.course}" vào khung giờ ${s.timeRange}`);
         }
-        if (s.teacher === selectedTeacher) {
+        if (selectedTeacher && s.teacher === selectedTeacher) {
           conflicts.push(`Giảng viên [${s.teacher}] đã có lịch dạy môn "${s.course}"`);
         }
       }
@@ -1104,7 +1322,9 @@ function initAddScheduleModal() {
     } else {
       alertBox.className = 'alert alert-success d-flex align-items-center gap-2 py-2 px-3 mb-0 rounded-3 mt-3 border-success-subtle';
       alertIcon.className = 'bi bi-check-circle-fill text-success fs-5';
-      alertMsg.innerHTML = `<strong>✅ Trạng thái hợp lệ:</strong> Phòng [${selectedRoom}] và ${selectedTeacher} đều trống, sẵn sàng xếp lịch!`;
+      const roomText = selectedRoom ? `Phòng [${selectedRoom}]` : 'Phòng học';
+      const teacherText = selectedTeacher ? selectedTeacher : 'Giảng viên';
+      alertMsg.innerHTML = `<strong>✅ Trạng thái hợp lệ:</strong> ${roomText} và ${teacherText} đều trống trong khung giờ này, sẵn sàng xếp lịch!`;
       if (submitBtn) {
         submitBtn.innerHTML = '<i class="bi bi-plus-circle me-1"></i> Thêm Lịch Mới';
         submitBtn.className = 'btn btn-primary-custom px-4 fw-bold shadow-sm';
@@ -1112,21 +1332,98 @@ function initAddScheduleModal() {
     }
   }
 
-  // 9. Form Submit Event
+  // 8. Validation toàn diện & Submit Form
   if (form) {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
 
+      const invalidEls = [];
+
+      // 1. Kiểm tra loại lịch
+      if (!currentScheduleType) {
+        invalidEls.push(setFieldError(typeSelector, 'errorScheduleType', 'Vui lòng bấm chọn loại lịch đào tạo'));
+      }
+
+      // 2. Kiểm tra Khoa
+      if (!deptSelect.value) {
+        invalidEls.push(setFieldError(deptSelect, 'errorDept', 'Vui lòng chọn Khoa / Viện đào tạo'));
+      }
+
+      // 3. Kiểm tra Môn học
+      if (!courseSelect.value) {
+        invalidEls.push(setFieldError(courseSelect, 'errorCourse', 'Vui lòng chọn Môn học'));
+      }
+
+      // 4. Kiểm tra Giảng viên
+      if (!teacherSelect.value) {
+        const msg = currentScheduleType === 'exam' ? 'Vui lòng chọn Cán bộ coi thi / Giám thị' : 'Vui lòng chọn Giảng viên phụ trách';
+        invalidEls.push(setFieldError(teacherSelect, 'errorTeacher', msg));
+      }
+
+      // 5. Kiểm tra Tòa nhà
+      if (!buildingSelect.value) {
+        invalidEls.push(setFieldError(buildingSelect, 'errorBuilding', 'Vui lòng chọn Tòa nhà'));
+      }
+
+      // 6. Kiểm tra Phòng
+      if (!roomSelect.value) {
+        invalidEls.push(setFieldError(roomSelect, 'errorRoom', 'Vui lòng chọn Phòng học / Phòng thi'));
+      }
+
+      // 7. Kiểm tra thời gian
+      if (currentScheduleType === 'regular_class') {
+        if (!regularDaySelect.value) {
+          invalidEls.push(setFieldError(regularDaySelect, 'errorRegularDay', 'Vui lòng chọn Thứ trong tuần'));
+        }
+        if (!regularFromPeriod.value) {
+          invalidEls.push(setFieldError(regularFromPeriod, 'errorRegularFrom', 'Vui lòng chọn Từ tiết'));
+        }
+        if (!regularToPeriod.value) {
+          invalidEls.push(setFieldError(regularToPeriod, 'errorRegularTo', 'Vui lòng chọn Đến tiết'));
+        }
+        if (!regularStartDate.value) {
+          invalidEls.push(setFieldError(regularStartDate, 'errorRegularStart', 'Vui lòng chọn ngày bắt đầu'));
+        }
+        if (!regularEndDate.value) {
+          invalidEls.push(setFieldError(regularEndDate, 'errorRegularEnd', 'Vui lòng chọn ngày kết thúc'));
+        } else if (regularStartDate.value && regularEndDate.value < regularStartDate.value) {
+          invalidEls.push(setFieldError(regularEndDate, 'errorRegularEnd', 'Ngày kết thúc phải sau hoặc bằng ngày bắt đầu'));
+        }
+      } else if (currentScheduleType === 'exam') {
+        if (!specificDate.value) {
+          invalidEls.push(setFieldError(specificDate, 'errorSpecificDate', 'Vui lòng chọn Ngày diễn ra thi'));
+        }
+        const examTimeVal = getFormattedExamTime();
+        if (!examTimeVal || !hourInput.value || !minuteInput.value) {
+          invalidEls.push(setFieldError(document.getElementById('examTimeInputGroup'), 'errorExamTime', 'Vui lòng nhập giờ thi hợp lệ (vd: 12h30)'));
+        }
+      }
+
+      // Nếu có lỗi -> cuộn modal tới ô lỗi đầu tiên và chặn thêm lịch
+      if (invalidEls.length > 0) {
+        const firstErr = invalidEls[0];
+        if (firstErr) {
+          firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          if (typeof firstErr.focus === 'function') {
+            firstErr.focus();
+          }
+        }
+        return false;
+      }
+
+      // Tất cả hợp lệ -> Tiến hành thêm lịch vào mảng mock data
       let targetDayKey = 'th4';
       let targetDayLabel = 'Thứ 4';
-      let targetPeriods = `${regularFromPeriod.value} - ${regularToPeriod.value}`;
-      let targetTimeRange = regularTimeDisplay.value;
+      let targetPeriods = '';
+      let targetTimeRange = '';
       let targetDateStr = '';
       let targetDateRange = '';
 
       if (currentScheduleType === 'regular_class') {
         targetDayKey = convertDayNameToKey(regularDaySelect.value);
         targetDayLabel = regularDaySelect.value;
+        targetPeriods = `${regularFromPeriod.value} - ${regularToPeriod.value}`;
+        targetTimeRange = regularTimeDisplay.value;
         const startFormatted = formatVNStandardDate(regularStartDate.value);
         const endFormatted = formatVNStandardDate(regularEndDate.value);
         targetDateRange = (startFormatted && endFormatted) ? `${startFormatted} đến ${endFormatted}` : '';
@@ -1135,7 +1432,7 @@ function initAddScheduleModal() {
         targetDayKey = convertDateToDayKey(targetDateStr);
         targetDayLabel = convertDayKeyToLabel(targetDayKey);
         targetPeriods = 'Ca thi';
-        targetTimeRange = getFormattedExamTime(); // e.g. 12h30
+        targetTimeRange = getFormattedExamTime();
       }
 
       const newSchedule = {
@@ -1160,6 +1457,7 @@ function initAddScheduleModal() {
 
       schedulesData.unshift(newSchedule);
 
+      // Chuyển view ngày sang ngày có lịch mới để xem trực quan
       currentSelectedDayKey = targetDayKey;
       currentSelectedDayLabel = convertDayKeyToLabel(targetDayKey);
 
@@ -1171,23 +1469,23 @@ function initAddScheduleModal() {
         }
       });
 
+      // Render lại giao diện
       renderScheduleUI();
 
-      const modalEl = document.getElementById('addScheduleModal');
+      // Đóng modal
       const bsModal = bootstrap.Modal.getInstance(modalEl);
       if (bsModal) {
         bsModal.hide();
       }
 
-      showToast(`Đã thêm thành công: ${newSchedule.course} vào ${newSchedule.dayLabel} (${newSchedule.room})!`);
+      // Thông báo thành công
+      const typeLabel = currentScheduleType === 'exam' ? 'Lịch thi' : 'Lịch học';
+      showToast(`Đã thêm thành công ${typeLabel}: ${newSchedule.course} (${newSchedule.room})!`);
     });
   }
 
-  // Initial runs
-  updateCoursesAndTeachers();
-  updateRooms();
-  updateRegularTime();
-  updateExamTimeBadge();
+  // Khởi tạo ban đầu ở trạng thái trắng
+  resetModalState();
 }
 
 // =========================================================================

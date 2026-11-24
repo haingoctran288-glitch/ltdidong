@@ -1043,25 +1043,26 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
 
-        <form id="formAddSchedule">
+        <form id="formAddSchedule" novalidate>
           <div class="modal-body p-4" style="max-height: 75vh; overflow-y: auto;">
             
-            <!-- 1. CHỌN LOẠI LỊCH (2 Nút chọn nhanh gọn gàng: Lịch học định kỳ & Lịch thi) -->
-            <div class="mb-4">
+            <!-- 1. CHỌN LOẠI LỊCH (2 Nút chọn nhanh: Chưa chọn sẵn nút nào khi mới mở) -->
+            <div class="mb-4" id="groupScheduleType">
               <label class="form-label fw-bold text-dark d-flex align-items-center gap-1 mb-2">
-                <i class="bi bi-tag-fill text-primary"></i> 1. Loại lịch đào tạo
+                <i class="bi bi-tag-fill text-primary"></i> 1. Loại lịch đào tạo <span class="text-danger">*</span>
               </label>
-              <div class="schedule-type-selector d-flex gap-2 p-1 bg-light rounded-3 border">
-                <button type="button" class="schedule-type-btn active flex-fill py-2 px-3 rounded-3 border-0 fw-bold text-center" data-type="regular_class">
+              <div class="schedule-type-selector d-flex gap-2 p-1 bg-light rounded-3 border" id="scheduleTypeSelector">
+                <button type="button" class="schedule-type-btn flex-fill py-2 px-3 rounded-3 border-0 fw-bold text-center" data-type="regular_class">
                   <i class="bi bi-calendar-check-fill me-1 text-warning"></i> Lịch học định kỳ
                 </button>
                 <button type="button" class="schedule-type-btn flex-fill py-2 px-3 rounded-3 border-0 fw-bold text-center" data-type="exam">
                   <i class="bi bi-clipboard2-check-fill me-1 text-success"></i> Lịch thi
                 </button>
               </div>
+              <div class="field-error-msg d-none" id="errorScheduleType"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn loại lịch đào tạo</div>
             </div>
 
-            <!-- 2. THÔNG TIN MÔN HỌC & GIẢNG VIÊN (Đã loại bỏ hoàn toàn Lớp học phần) -->
+            <!-- 2. THÔNG TIN MÔN HỌC & GIẢNG VIÊN -->
             <div class="mb-4">
               <label class="form-label fw-bold text-dark d-flex align-items-center gap-1 mb-2">
                 <i class="bi bi-mortarboard-fill text-primary"></i> 2. Thông tin môn học & giảng viên
@@ -1069,27 +1070,30 @@
               
               <div class="row g-3">
                 <!-- Chọn Khoa -->
-                <div class="col-md-6">
-                  <label class="form-label small fw-semibold text-secondary">Khoa / Viện đào tạo</label>
+                <div class="col-md-6" id="groupDept">
+                  <label class="form-label small fw-semibold text-secondary">Khoa / Viện đào tạo <span class="text-danger">*</span></label>
                   <select class="form-select form-select-custom" id="modalSelectDept">
-                    <!-- Populated by JS -->
+                    <option value="" selected disabled>-- Chọn Khoa / Viện --</option>
                   </select>
+                  <div class="field-error-msg d-none" id="errorDept"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn Khoa / Viện đào tạo</div>
                 </div>
 
                 <!-- Chọn Môn học -->
-                <div class="col-md-6">
+                <div class="col-md-6" id="groupCourse">
                   <label class="form-label small fw-semibold text-secondary">Môn học <span class="text-danger">*</span></label>
-                  <select class="form-select form-select-custom" id="modalSelectCourse" required>
-                    <!-- Populated by JS -->
+                  <select class="form-select form-select-custom" id="modalSelectCourse" disabled>
+                    <option value="" selected disabled>-- Vui lòng chọn Khoa trước --</option>
                   </select>
+                  <div class="field-error-msg d-none" id="errorCourse"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn Môn học</div>
                 </div>
 
                 <!-- Giảng viên phụ trách / Cán bộ coi thi -->
                 <div class="col-md-12" id="teacherColWrapper">
                   <label class="form-label small fw-semibold text-secondary" id="modalLabelTeacher">Giảng viên phụ trách <span class="text-danger">*</span></label>
-                  <select class="form-select form-select-custom" id="modalSelectTeacher" required>
-                    <!-- Populated by JS -->
+                  <select class="form-select form-select-custom" id="modalSelectTeacher" disabled>
+                    <option value="" selected disabled>-- Vui lòng chọn Khoa trước --</option>
                   </select>
+                  <div class="field-error-msg d-none" id="errorTeacher"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn Giảng viên phụ trách</div>
                 </div>
 
                 <!-- Các trường phụ chỉ hiện khi là Lịch thi -->
@@ -1130,18 +1134,20 @@
               </label>
 
               <div class="row g-3">
-                <div class="col-md-6">
-                  <label class="form-label small fw-semibold text-secondary">Tòa nhà</label>
+                <div class="col-md-6" id="groupBuilding">
+                  <label class="form-label small fw-semibold text-secondary">Tòa nhà <span class="text-danger">*</span></label>
                   <select class="form-select form-select-custom" id="modalSelectBuilding">
-                    <!-- Populated by JS -->
+                    <option value="" selected disabled>-- Chọn Tòa nhà --</option>
                   </select>
+                  <div class="field-error-msg d-none" id="errorBuilding"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn Tòa nhà</div>
                 </div>
 
-                <div class="col-md-6">
+                <div class="col-md-6" id="groupRoom">
                   <label class="form-label small fw-semibold text-secondary">Phòng học / Phòng thi <span class="text-danger">*</span></label>
-                  <select class="form-select form-select-custom" id="modalSelectRoom" required>
-                    <!-- Populated by JS -->
+                  <select class="form-select form-select-custom" id="modalSelectRoom" disabled>
+                    <option value="" selected disabled>-- Vui lòng chọn Tòa nhà trước --</option>
                   </select>
+                  <div class="field-error-msg d-none" id="errorRoom"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn Phòng học / Phòng thi</div>
                 </div>
               </div>
             </div>
@@ -1149,89 +1155,101 @@
             <!-- 4. THỜI GIAN DIỄN RA -->
             <div class="mb-3">
               <label class="form-label fw-bold text-dark d-flex align-items-center gap-1 mb-2">
-                <i class="bi bi-clock-history text-primary"></i> 4. Thời gian diễn ra
+                <i class="bi bi-clock-history text-primary"></i> 4. Thời gian diễn ra <span class="text-danger">*</span>
               </label>
 
+              <!-- Gợi ý khi chưa chọn loại lịch -->
+              <div id="timeGroupEmptyHint" class="p-3 bg-light rounded-3 text-muted small text-center border border-dashed mb-2">
+                <i class="bi bi-info-circle me-1 text-primary"></i> Vui lòng bấm chọn loại lịch ở <strong>Bước 1</strong> (Lịch học định kỳ hoặc Lịch thi) để thiết lập thời gian.
+              </div>
+
               <!-- A. Nhóm thời gian cho: Lịch học định kỳ -->
-              <div id="timeGroupRegular">
+              <div id="timeGroupRegular" class="d-none">
                 <div class="row g-3 mb-2">
-                  <div class="col-md-4">
-                    <label class="form-label small fw-semibold text-secondary">Thứ trong tuần</label>
+                  <div class="col-md-4" id="groupRegularDay">
+                    <label class="form-label small fw-semibold text-secondary">Thứ trong tuần <span class="text-danger">*</span></label>
                     <select class="form-select form-select-custom" id="modalRegularDay">
+                      <option value="" selected disabled>-- Chọn Thứ --</option>
                       <option value="Thứ 2">Thứ 2</option>
                       <option value="Thứ 3">Thứ 3</option>
-                      <option value="Thứ 4" selected>Thứ 4</option>
+                      <option value="Thứ 4">Thứ 4</option>
                       <option value="Thứ 5">Thứ 5</option>
                       <option value="Thứ 6">Thứ 6</option>
                       <option value="Thứ 7">Thứ 7</option>
+                      <option value="Chủ Nhật">Chủ Nhật</option>
                     </select>
+                    <div class="field-error-msg d-none" id="errorRegularDay"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn Thứ trong tuần</div>
                   </div>
 
-                  <div class="col-md-4">
-                    <label class="form-label small fw-semibold text-secondary">Từ tiết</label>
+                  <div class="col-md-4" id="groupRegularFrom">
+                    <label class="form-label small fw-semibold text-secondary">Từ tiết <span class="text-danger">*</span></label>
                     <select class="form-select form-select-custom" id="modalRegularFromPeriod">
-                      <!-- 1..12 -->
+                      <option value="" selected disabled>-- Từ tiết --</option>
                     </select>
+                    <div class="field-error-msg d-none" id="errorRegularFrom"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn Từ tiết</div>
                   </div>
 
-                  <div class="col-md-4">
-                    <label class="form-label small fw-semibold text-secondary">Đến tiết</label>
-                    <select class="form-select form-select-custom" id="modalRegularToPeriod">
-                      <!-- 1..12 -->
+                  <div class="col-md-4" id="groupRegularTo">
+                    <label class="form-label small fw-semibold text-secondary">Đến tiết <span class="text-danger">*</span></label>
+                    <select class="form-select form-select-custom" id="modalRegularToPeriod" disabled>
+                      <option value="" selected disabled>-- Chọn Từ tiết trước --</option>
                     </select>
+                    <div class="field-error-msg d-none" id="errorRegularTo"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn Đến tiết</div>
                   </div>
                 </div>
 
                 <div class="row g-3">
                   <div class="col-md-4">
                     <label class="form-label small fw-semibold text-secondary">Khung giờ học tương ứng</label>
-                    <input type="text" class="form-control bg-light fw-bold text-primary" id="modalRegularTimeDisplay" value="07:30 - 11:30" readonly>
+                    <input type="text" class="form-control bg-light fw-bold text-primary" id="modalRegularTimeDisplay" value="-- : --" readonly>
                   </div>
 
-                  <div class="col-md-4">
-                    <label class="form-label small fw-semibold text-secondary">Từ ngày</label>
-                    <input type="date" class="form-control" id="modalRegularStartDate" value="2026-11-16">
+                  <div class="col-md-4" id="groupRegularStart">
+                    <label class="form-label small fw-semibold text-secondary">Từ ngày <span class="text-danger">*</span></label>
+                    <input type="date" class="form-control" id="modalRegularStartDate" value="">
+                    <div class="field-error-msg d-none" id="errorRegularStart"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn ngày bắt đầu</div>
                   </div>
 
-                  <div class="col-md-4">
-                    <label class="form-label small fw-semibold text-secondary">Đến ngày</label>
-                    <input type="date" class="form-control" id="modalRegularEndDate" value="2027-01-15">
+                  <div class="col-md-4" id="groupRegularEnd">
+                    <label class="form-label small fw-semibold text-secondary">Đến ngày <span class="text-danger">*</span></label>
+                    <input type="date" class="form-control" id="modalRegularEndDate" value="">
+                    <div class="field-error-msg d-none" id="errorRegularEnd"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn ngày kết thúc</div>
                   </div>
                 </div>
               </div>
 
-              <!-- B. Nhóm thời gian cho: Lịch thi (Bỏ khung giờ tự động, nhập giờ tự nhảy phút -> hiển thị dạng 12h30) -->
+              <!-- B. Nhóm thời gian cho: Lịch thi -->
               <div id="timeGroupSpecific" class="d-none">
                 <div class="row g-3">
                   <!-- Ngày thi -->
-                  <div class="col-md-6">
+                  <div class="col-md-6" id="groupSpecificDate">
                     <label class="form-label small fw-semibold text-secondary">Ngày diễn ra thi <span class="text-danger">*</span></label>
-                    <input type="date" class="form-control" id="modalSpecificDate" value="2026-11-19">
+                    <input type="date" class="form-control" id="modalSpecificDate" value="">
+                    <div class="field-error-msg d-none" id="errorSpecificDate"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn Ngày diễn ra thi</div>
                   </div>
 
                   <!-- Giờ thi nhập tay: Nhập 12 rồi tự chuyển qua phút 30 -> hiện 12h30 -->
-                  <div class="col-md-6">
+                  <div class="col-md-6" id="groupExamTime">
                     <label class="form-label small fw-semibold text-secondary">Giờ bắt đầu thi <span class="text-danger">*</span></label>
                     <div class="d-flex align-items-center gap-2">
-                      <div class="input-group" style="width: 170px;">
-                        <input type="text" id="examHourInput" class="form-control text-center fw-bold fs-6" placeholder="12" maxlength="2" value="12" style="border-radius: 10px 0 0 10px;">
+                      <div class="input-group" id="examTimeInputGroup" style="width: 170px;">
+                        <input type="text" id="examHourInput" class="form-control text-center fw-bold fs-6" placeholder="Giờ" maxlength="2" value="" style="border-radius: 10px 0 0 10px;">
                         <span class="input-group-text fw-bold bg-light text-primary">h</span>
-                        <input type="text" id="examMinuteInput" class="form-control text-center fw-bold fs-6" placeholder="30" maxlength="2" value="30" style="border-radius: 0 10px 10px 0;">
+                        <input type="text" id="examMinuteInput" class="form-control text-center fw-bold fs-6" placeholder="Phút" maxlength="2" value="" style="border-radius: 0 10px 10px 0;">
                       </div>
-                      <span class="badge bg-primary-subtle text-primary border px-3 py-2 fw-bold fs-6" id="examTimeBadgePreview">12h30</span>
+                      <span class="badge bg-primary-subtle text-primary border px-3 py-2 fw-bold fs-6" id="examTimeBadgePreview">--h--</span>
                     </div>
-                    <small class="text-muted" style="font-size: 11px;">(Nhập 2 số giờ sẽ tự động chuyển sang nhập phút)</small>
+                    <small class="text-muted" style="font-size: 11px;">(Nhập 2 số giờ sẽ tự động chuyển sang nhập phút, vd: 12h30)</small>
+                    <div class="field-error-msg d-none" id="errorExamTime"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng nhập giờ thi hợp lệ (vd: 12h30)</div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- 5. HỘP CẢNH BÁO KIỂM TRA TRÙNG LỊCH (Realtime Feedback) -->
-            <div id="modalConflictAlert" class="alert d-flex align-items-center gap-2 py-2 px-3 mb-0 rounded-3 mt-3 transition-all alert-success border-success-subtle">
+            <!-- 5. HỘP CẢNH BÁO KIỂM TRA TRÙNG LỊCH (Chỉ hiện khi đã chọn đủ thông tin) -->
+            <div id="modalConflictAlert" class="alert d-flex align-items-center gap-2 py-2 px-3 mb-0 rounded-3 mt-3 transition-all d-none">
               <i class="bi bi-check-circle-fill text-success fs-5" id="modalConflictIcon"></i>
-              <div class="small" id="modalConflictMessage">
-                <strong>Trạng thái hợp lệ:</strong> Phòng học và Giảng viên đều trống, sẵn sàng xếp lịch!
-              </div>
+              <div class="small" id="modalConflictMessage"></div>
             </div>
 
           </div>

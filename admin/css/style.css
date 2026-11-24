@@ -894,6 +894,48 @@ body {
   transition: all 0.25s ease-in-out;
 }
 
+/* Custom Validation & Error Highlighting for Add Schedule Modal */
+.field-error-msg {
+  color: #ef4444;
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin-top: 5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  animation: fadeInDown 0.2s ease;
+}
+
+.schedule-type-selector.is-invalid {
+  border: 1.5px solid #ef4444 !important;
+  background-color: #fef2f2 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
+}
+
+.form-select.is-invalid, 
+.form-control.is-invalid {
+  border-color: #ef4444 !important;
+  background-color: #fef2f2 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
+}
+
+.input-group.is-invalid {
+  border: 1.5px solid #ef4444 !important;
+  border-radius: 10px;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Mobile responsive */
 @media (max-width: 991px) {
   .sidebar {
