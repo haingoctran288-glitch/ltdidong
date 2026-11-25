@@ -405,12 +405,11 @@
             </div>
             
             <div class="d-flex align-items-center gap-2 flex-wrap">
-              <!-- Segmented Control [ Ngày | Tuần | Tháng | Dạng bảng ] -->
+              <!-- Segmented Control [ Ngày | Tuần | Tháng ] -->
               <div class="schedule-nav-segmented" id="scheduleSegmentedNav">
                 <button type="button" class="nav-btn" data-subview="subview-day">Ngày</button>
                 <button type="button" class="nav-btn active" data-subview="subview-week">Tuần</button>
                 <button type="button" class="nav-btn" data-subview="subview-month">Tháng</button>
-                <button type="button" class="nav-btn" data-subview="subview-table">Dạng bảng</button>
               </div>
 
               <button class="btn btn-sm btn-primary-custom ms-1" data-bs-toggle="modal" data-bs-target="#addScheduleModal">
@@ -518,189 +517,37 @@
                       <th class="weekend-header">CN</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    <tr>
-                      <td></td><td></td><td></td><td></td><td></td><td></td>
-                      <td><div class="month-day-cell">1</div></td>
-                    </tr>
-                    <tr>
-                      <td><div class="month-day-cell">2</div></td>
-                      <td><div class="month-day-cell">3</div></td>
-                      <td><div class="month-day-cell">4</div></td>
-                      <td><div class="month-day-cell">5</div></td>
-                      <td><div class="month-day-cell">6</div></td>
-                      <td><div class="month-day-cell text-danger">7</div></td>
-                      <td><div class="month-day-cell text-danger">8</div></td>
-                    </tr>
-                    <tr>
-                      <td><div class="month-day-cell">9</div></td>
-                      <td><div class="month-day-cell">10</div></td>
-                      <td><div class="month-day-cell dot-exam" data-date="Th 4, 11/11">11</div></td>
-                      <td><div class="month-day-cell active-day dot-exam" data-date="Th 5, 12/11">12</div></td>
-                      <td><div class="month-day-cell">13</div></td>
-                      <td><div class="month-day-cell text-danger">14</div></td>
-                      <td><div class="month-day-cell text-danger">15</div></td>
-                    </tr>
-                    <tr>
-                      <td><div class="month-day-cell">16</div></td>
-                      <td><div class="month-day-cell dot-class" data-date="Th 3, 17/11">17</div></td>
-                      <td><div class="month-day-cell dot-class" data-date="Th 4, 18/11">18</div></td>
-                      <td><div class="month-day-cell dot-exam" data-date="Th 5, 19/11">19</div></td>
-                      <td><div class="month-day-cell dot-canceled" data-date="Th 6, 20/11">20</div></td>
-                      <td><div class="month-day-cell text-danger">21</div></td>
-                      <td><div class="month-day-cell text-danger">22</div></td>
-                    </tr>
-                    <tr>
-                      <td><div class="month-day-cell">23</div></td>
-                      <td><div class="month-day-cell">24</div></td>
-                      <td><div class="month-day-cell">25</div></td>
-                      <td><div class="month-day-cell">26</div></td>
-                      <td><div class="month-day-cell">27</div></td>
-                      <td><div class="month-day-cell text-danger">28</div></td>
-                      <td><div class="month-day-cell text-danger">29</div></td>
-                    </tr>
-                    <tr>
-                      <td><div class="month-day-cell">30</div></td>
-                      <td></td><td></td><td></td><td></td><td></td><td></td>
-                    </tr>
+                  <tbody id="monthCalendarBody">
+                    <!-- Dynamically populated by app.js -->
                   </tbody>
                 </table>
               </div>
 
-              <!-- Timeline Badge for Th 4, 11/11 (như ảnh 1 và 3) -->
+              <!-- Timeline Badge & Dynamic Day Cards for Month View -->
               <div class="timeline-date-divider">
-                <span class="timeline-date-badge">Th 4, 11/11</span>
+                <span class="timeline-date-badge" id="monthTimelineBadge">Th 4, 18/11</span>
               </div>
 
-              <!-- Exam Card 1 (Chuẩn như ảnh 1 và 3) -->
-              <div class="schedule-item-card type-exam">
-                <div class="schedule-card-inner">
-                  <div class="d-flex justify-content-between align-items-center mb-1">
-                    <span class="badge-schedule-exam">
-                      <i class="bi bi-circle-fill"></i> Lịch thi
-                    </span>
-                    <div class="d-flex align-items-center gap-2">
-                      <button class="btn btn-sm btn-light text-secondary p-1 px-2"><i class="bi bi-pencil"></i></button>
-                      <button class="btn btn-sm btn-light text-danger p-1 px-2"><i class="bi bi-trash"></i></button>
-                      <i class="bi bi-calendar3 text-muted fs-5 ms-1"></i>
-                    </div>
-                  </div>
-
-                  <h5 class="schedule-course-title">Nhập môn lập trình</h5>
-
-                  <div class="row g-2">
-                    <div class="col-md-6">
-                      <div class="schedule-info-row">
-                        <span class="schedule-info-label">Giờ thi:</span>
-                        <span class="schedule-info-val">12g30</span>
-                      </div>
-                      <div class="schedule-info-row">
-                        <span class="schedule-info-label">Thời gian thi:</span>
-                        <span class="schedule-info-val">90 phút</span>
-                      </div>
-                      <div class="schedule-info-row">
-                        <span class="schedule-info-label">Hình thức thi:</span>
-                        <span class="schedule-info-val">Tự luận</span>
-                      </div>
-                    </div>
-                    <div class="col-md-6">
-                      <div class="schedule-info-row">
-                        <span class="schedule-info-label">Nhóm:</span>
-                        <span class="schedule-info-val">2</span>
-                      </div>
-                      <div class="schedule-info-row">
-                        <span class="schedule-info-label">Từ sĩ số:</span>
-                        <span class="schedule-info-val">39 - 76</span>
-                      </div>
-                      <div class="schedule-info-row">
-                        <span class="schedule-info-label">Phòng:</span>
-                        <span class="schedule-info-val text-primary"><i class="bi bi-geo-alt-fill text-danger me-1"></i>A404</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div id="monthCardsContainer" class="mt-3">
+                <!-- Dynamically populated by app.js -->
               </div>
             </div>
 
             <!-- ================= 3.3 SUBVIEW: NGÀY ================= -->
             <div id="subview-day" class="schedule-subview d-none">
               <div class="d-flex align-items-center justify-content-between mb-3 bg-light p-3 rounded-3 border">
-                <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-chevron-left me-1"></i> Hôm trước</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="prevDayBtn"><i class="bi bi-chevron-left me-1"></i> Hôm trước</button>
                 <div class="text-center">
-                  <h6 class="fw-bold mb-0 text-primary">Thứ 4, ngày 18/11/2026</h6>
-                  <small class="text-muted">Tổng cộng 2 ca học</small>
+                  <h6 class="fw-bold mb-0 text-primary" id="dayViewTitleDate">Thứ 4, ngày 18/11/2026</h6>
+                  <small class="text-muted" id="dayViewCountSubtitle">Tổng cộng 2 ca học / thi</small>
                 </div>
-                <button class="btn btn-sm btn-outline-secondary">Hôm sau <i class="bi bi-chevron-right ms-1"></i></button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="nextDayBtn">Hôm sau <i class="bi bi-chevron-right ms-1"></i></button>
               </div>
 
               <div class="timeline-date-divider">
-                <span class="timeline-date-badge">Th 4, 18/11</span>
+                <span class="timeline-date-badge" id="dayTimelineBadge">Th 4, 18/11</span>
               </div>
-              <div id="dayCardsContainer" class="mt-3"></div></div>
-
-            <!-- ================= 3.4 SUBVIEW: DẠNG BẢNG ================= -->
-            <div id="subview-table" class="schedule-subview d-none">
-              <div class="table-responsive">
-                <table class="table table-custom">
-                  <thead>
-                    <tr>
-                      <th>Loại</th>
-                      <th>Mã Môn</th>
-                      <th>Tên Môn Học</th>
-                      <th>Lớp Học Phần</th>
-                      <th>Giảng Viên</th>
-                      <th>Phòng Học</th>
-                      <th>Lịch Trình</th>
-                      <th>Trạng Thái</th>
-                      <th>Thao Tác</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td><span class="badge bg-warning text-dark">Lịch học</span></td>
-                      <td>MOB402</td>
-                      <td><strong>Thực hành lập trình di động</strong></td>
-                      <td>D19-CNTT01</td>
-                      <td>Nguyễn Văn A</td>
-                      <td>D2-07</td>
-                      <td>Thứ 4 (12:30 - 16:30)</td>
-                      <td><span class="badge bg-success-subtle text-success">Đang diễn ra</span></td>
-                      <td>
-                        <button class="btn btn-sm btn-light text-primary"><i class="bi bi-pencil"></i></button>
-                        <button class="btn btn-sm btn-light text-danger"><i class="bi bi-trash"></i></button>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td><span class="badge bg-success">Lịch thi</span></td>
-                      <td>BAS101</td>
-                      <td><strong>Nhập môn lập trình (Tự luận)</strong></td>
-                      <td>D19-CNTT01,02</td>
-                      <td>Ban Khảo Thí</td>
-                      <td>A404</td>
-                      <td>Thứ 5, 19/11 (12g30)</td>
-                      <td><span class="badge bg-primary-subtle text-primary">Sắp thi</span></td>
-                      <td>
-                        <button class="btn btn-sm btn-light text-primary"><i class="bi bi-pencil"></i></button>
-                        <button class="btn btn-sm btn-light text-danger"><i class="bi bi-trash"></i></button>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td><span class="badge bg-danger">Lịch hủy</span></td>
-                      <td>PHI101</td>
-                      <td><strong>Triết học Mác-Lênin</strong></td>
-                      <td>D19-CNTT01</td>
-                      <td>TS. Nguyễn Văn E</td>
-                      <td>C102</td>
-                      <td>Thứ 6, 20/11 (07:30 - 11:30)</td>
-                      <td><span class="badge bg-danger-subtle text-danger">Tạm nghỉ (bù sau)</span></td>
-                      <td>
-                        <button class="btn btn-sm btn-light text-primary"><i class="bi bi-pencil"></i></button>
-                        <button class="btn btn-sm btn-light text-danger"><i class="bi bi-trash"></i></button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+              <div id="dayCardsContainer" class="mt-3"></div>
             </div>
 
           </div>
@@ -1274,6 +1121,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- QRCode.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <!-- App JS -->
   <script src="js/app.js"></script>
 </body>

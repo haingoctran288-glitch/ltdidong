@@ -145,9 +145,9 @@ function initQRCode() {
   function generateNewQR() {
     const timestamp = Date.now();
     const token = 'ATTEND_' + Math.random().toString(36).substring(2, 9).toUpperCase() + '_' + timestamp;
-    
+
     qrTarget.innerHTML = '';
-    
+
     if (typeof QRCode !== 'undefined') {
       qrCodeInstance = new QRCode(qrTarget, {
         text: `unistudent://checkin?code=${token}`,
@@ -423,10 +423,84 @@ let schedulesData = [
   }
 ];
 
+let currentSelectedDate = new Date(2026, 10, 18); // 18/11/2026
 let currentSelectedDayKey = 'th4';
 let currentSelectedDayLabel = 'Th 4, 18/11';
 let currentSelectedYear = 2026;
 let currentSelectedMonth = 11;
+
+function toISODate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function getDayKeyFromDate(d) {
+  const map = { 1: 'th2', 2: 'th3', 3: 'th4', 4: 'th5', 5: 'th6', 6: 'th7', 0: 'cn' };
+  return map[d.getDay()] || 'th4';
+}
+
+function formatShortDayLabel(d) {
+  const shortDays = { 0: 'CN', 1: 'Th 2', 2: 'Th 3', 3: 'Th 4', 4: 'Th 5', 5: 'Th 6', 6: 'Th 7' };
+  const dayNum = String(d.getDate()).padStart(2, '0');
+  const monthNum = String(d.getMonth() + 1).padStart(2, '0');
+  return `${shortDays[d.getDay()]}, ${dayNum}/${monthNum}`;
+}
+
+function formatFullDayTitle(d) {
+  const fullDays = { 0: 'Chủ Nhật', 1: 'Thứ 2', 2: 'Thứ 3', 3: 'Thứ 4', 4: 'Thứ 5', 5: 'Thứ 6', 6: 'Thứ 7' };
+  const dayNum = String(d.getDate()).padStart(2, '0');
+  const monthNum = String(d.getMonth() + 1).padStart(2, '0');
+  return `${fullDays[d.getDay()]}, ngày ${dayNum}/${monthNum}/${d.getFullYear()}`;
+}
+
+function parseVNDateToObj(str) {
+  if (!str) return null;
+  const clean = str.trim().replace(/\//g, '-');
+  const parts = clean.split('-');
+  if (parts.length !== 3) return null;
+  if (parts[0].length === 4) {
+    return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  }
+  return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+}
+
+function syncDateState(newDate) {
+  currentSelectedDate = new Date(newDate.getFullYear(), newDate.getMonth(), newDate.getDate());
+  currentSelectedYear = currentSelectedDate.getFullYear();
+  currentSelectedMonth = currentSelectedDate.getMonth() + 1;
+  currentSelectedDayKey = getDayKeyFromDate(currentSelectedDate);
+  currentSelectedDayLabel = formatShortDayLabel(currentSelectedDate);
+}
+
+function getSchedulesForDate(dateObj) {
+  const iso = toISODate(dateObj);
+  const dayKey = getDayKeyFromDate(dateObj);
+  const targetTime = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate()).getTime();
+
+  return schedulesData.filter(s => {
+    if (s.dateStr && s.dateStr === iso) {
+      return true;
+    }
+    const isRegular = s.type === 'regular_class' || (s.type === 'canceled' && s.originalType === 'regular_class');
+    if (isRegular && s.dayKey === dayKey) {
+      if (s.dateRange) {
+        const delimiter = s.dateRange.includes('đến') ? 'đến' : ' - ';
+        const rangeParts = s.dateRange.split(delimiter).map(p => p.trim());
+        if (rangeParts.length === 2) {
+          const startD = parseVNDateToObj(rangeParts[0]);
+          const endD = parseVNDateToObj(rangeParts[1]);
+          if (startD && endD) {
+            return targetTime >= startD.getTime() && targetTime <= endD.getTime();
+          }
+        }
+      }
+      return true;
+    }
+    return false;
+  });
+}
 
 // Period calculation helper
 function calculatePeriodTime(fromP, toP) {
@@ -518,105 +592,93 @@ function formatDisplayDateRange(range) {
 // =========================================================================
 
 function renderScheduleUI() {
-  // A. Update Week Day Strip Indicators (Yellow for class, Green for exam, Red for canceled)
-  const weekDayKeys = ['th2', 'th3', 'th4', 'th5', 'th6', 'th7', 'cn'];
-  weekDayKeys.forEach(key => {
-    const dayItem = document.querySelector(`.week-day-item[data-day-key="${key}"]`);
-    if (!dayItem) return;
+  const selectedIso = toISODate(currentSelectedDate);
+  const selectedFormattedDate = `${String(currentSelectedDate.getDate()).padStart(2, '0')}/${String(currentSelectedDate.getMonth() + 1).padStart(2, '0')}/${currentSelectedDate.getFullYear()}`;
 
+  // Sync top Month-Year label & picker active state
+  const currentMonthYearLabel = document.getElementById('currentMonthYearLabel');
+  if (currentMonthYearLabel) {
+    currentMonthYearLabel.innerText = `tháng ${currentSelectedMonth}, ${currentSelectedYear}`;
+  }
+  const pickerYearDisplay = document.getElementById('pickerYearDisplay');
+  if (pickerYearDisplay) {
+    pickerYearDisplay.innerText = currentSelectedYear;
+  }
+  document.querySelectorAll('.month-btn-item').forEach(btn => {
+    const m = parseInt(btn.getAttribute('data-month'), 10);
+    btn.classList.toggle('active', m === currentSelectedMonth);
+  });
+
+  // A. Update Week Day Strip (Monday -> Sunday of currentSelectedDate's week)
+  const dayOfWeek = currentSelectedDate.getDay(); // 0 (CN) .. 6 (Th 7)
+  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const mondayDate = new Date(currentSelectedDate.getFullYear(), currentSelectedDate.getMonth(), currentSelectedDate.getDate() + diffToMonday);
+  const weekDayItems = document.querySelectorAll('.week-day-strip .week-day-item');
+  const dayShortNames = ['Th 2', 'Th 3', 'Th 4', 'Th 5', 'Th 6', 'Th 7', 'CN'];
+
+  weekDayItems.forEach((dayItem, idx) => {
+    const cellDate = new Date(mondayDate.getFullYear(), mondayDate.getMonth(), mondayDate.getDate() + idx);
+    const cellIso = toISODate(cellDate);
+    const cellKey = getDayKeyFromDate(cellDate);
+    const cellLabel = formatShortDayLabel(cellDate);
+
+    dayItem.setAttribute('data-day-key', cellKey);
+    dayItem.setAttribute('data-day-label', cellLabel);
+    dayItem.setAttribute('data-date-iso', cellIso);
+
+    const nameEl = dayItem.querySelector('.day-name');
+    const numEl = dayItem.querySelector('.day-number');
+    if (nameEl) nameEl.innerText = dayShortNames[idx];
+    if (numEl) numEl.innerText = cellDate.getDate();
+
+    dayItem.classList.toggle('active', cellIso === selectedIso);
     dayItem.classList.remove('has-schedule-class', 'has-schedule-exam', 'has-schedule-canceled');
 
-    const daySchedules = schedulesData.filter(s => s.dayKey === key);
+    const daySchedules = getSchedulesForDate(cellDate);
     if (daySchedules.length > 0) {
       if (daySchedules.some(s => s.type === 'canceled')) {
-        dayItem.classList.add('has-schedule-canceled'); // Gạch đỏ
+        dayItem.classList.add('has-schedule-canceled');
       } else if (daySchedules.some(s => s.type === 'exam')) {
-        dayItem.classList.add('has-schedule-exam'); // Gạch xanh lá
+        dayItem.classList.add('has-schedule-exam');
       } else {
-        dayItem.classList.add('has-schedule-class'); // Gạch vàng
+        dayItem.classList.add('has-schedule-class');
       }
     }
   });
 
+  // Empty state HTML helper
+  const emptyDayHTML = `
+    <div class="text-center py-5 bg-light rounded-3 border">
+      <i class="bi bi-calendar-x text-muted fs-1 mb-2 d-block"></i>
+      <h6 class="text-secondary fw-bold">Không có lịch học hoặc lịch thi trong ngày ${selectedFormattedDate}</h6>
+      <small class="text-muted">Sinh viên được nghỉ hoặc không có ca học / thi nào được xếp vào ngày này.</small>
+    </div>
+  `;
+
+  const activeDaySchedules = getSchedulesForDate(currentSelectedDate);
+  const cardsHTML = activeDaySchedules.length === 0
+    ? emptyDayHTML
+    : activeDaySchedules.map(s => renderScheduleCardHTML(s)).join('');
+
   // B. Render Week Cards for Active Day
   const weekCardsContainer = document.getElementById('weekCardsContainer');
   const weekTimelineBadge = document.getElementById('weekTimelineBadge');
-  if (weekTimelineBadge) {
-    weekTimelineBadge.innerText = currentSelectedDayLabel;
-  }
+  if (weekTimelineBadge) weekTimelineBadge.innerText = currentSelectedDayLabel;
+  if (weekCardsContainer) weekCardsContainer.innerHTML = cardsHTML;
 
-  if (weekCardsContainer) {
-    const activeSchedules = schedulesData.filter(s => s.dayKey === currentSelectedDayKey);
-    if (activeSchedules.length === 0) {
-      weekCardsContainer.innerHTML = `
-        <div class="text-center py-5 bg-light rounded-3 border">
-          <i class="bi bi-cup-hot text-muted fs-1 mb-2 d-block"></i>
-          <h6 class="text-secondary fw-bold">Không có lịch học hoặc lịch thi trong ngày này</h6>
-          <small class="text-muted">Sinh viên được nghỉ hoặc tham gia hoạt động ngoại khóa tự do.</small>
-        </div>
-      `;
-    } else {
-      weekCardsContainer.innerHTML = activeSchedules.map(s => renderScheduleCardHTML(s)).join('');
-    }
-  }
-
-  // C. Render Table View Rows (Sắp xếp cân đối, không có Lớp học phần)
-  const tableBody = document.getElementById('scheduleTableBody');
-  if (tableBody) {
-    tableBody.innerHTML = schedulesData.map(s => {
-      let badgeType = '';
-      if (s.type === 'exam') {
-        badgeType = '<span class="badge bg-success">Lịch thi</span>';
-      } else if (s.type === 'canceled') {
-        badgeType = '<span class="badge bg-danger">Lịch hủy</span>';
-      } else {
-        badgeType = '<span class="badge bg-warning text-dark">Lịch học</span>';
-      }
-
-      return `
-        <tr>
-          <td>${badgeType}</td>
-          <td><strong>${s.course}</strong></td>
-          <td><span class="badge bg-light text-dark border">${s.dept || 'Khoa CNTT'}</span></td>
-          <td><div class="fw-semibold">${s.teacher}</div></td>
-          <td><i class="bi bi-geo-alt-fill text-danger me-1"></i>${s.room}</td>
-          <td>${s.dayLabel || ''} (${s.timeRange})</td>
-          <td><span class="badge bg-success-subtle text-success">${s.status || 'Hoạt động'}</span></td>
-          <td class="text-end">
-            <button class="btn btn-sm btn-light text-primary" title="Chỉnh sửa"><i class="bi bi-pencil"></i></button>
-            <button class="btn btn-sm btn-light text-danger" title="Xóa lịch" onclick="deleteSchedule('${s.id}')"><i class="bi bi-trash"></i></button>
-          </td>
-        </tr>
-      `;
-    }).join('');
-  }
-
-  // D. Render Day View Cards
+  // C. Render Day View Cards
   const dayCardsContainer = document.getElementById('dayCardsContainer');
   const dayTimelineBadge = document.getElementById('dayTimelineBadge');
   const dayViewTitleDate = document.getElementById('dayViewTitleDate');
   const dayViewCountSubtitle = document.getElementById('dayViewCountSubtitle');
 
-  if (dayCardsContainer) {
-    const todaySchedules = schedulesData.filter(s => s.dayKey === currentSelectedDayKey);
-    if (dayTimelineBadge) dayTimelineBadge.innerText = currentSelectedDayLabel;
-    if (dayViewTitleDate) dayViewTitleDate.innerText = currentSelectedDayLabel;
-    if (dayViewCountSubtitle) dayViewCountSubtitle.innerText = `Tổng cộng ${todaySchedules.length} ca học / thi`;
+  if (dayTimelineBadge) dayTimelineBadge.innerText = currentSelectedDayLabel;
+  if (dayViewTitleDate) dayViewTitleDate.innerText = formatFullDayTitle(currentSelectedDate);
+  if (dayViewCountSubtitle) dayViewCountSubtitle.innerText = `Tổng cộng ${activeDaySchedules.length} ca học / thi`;
+  if (dayCardsContainer) dayCardsContainer.innerHTML = cardsHTML;
 
-    if (todaySchedules.length === 0) {
-      dayCardsContainer.innerHTML = `
-        <div class="text-center py-5 bg-light rounded-3 border">
-          <i class="bi bi-calendar-x text-muted fs-1 mb-2 d-block"></i>
-          <h6 class="text-secondary fw-bold">Không có lịch học hoặc lịch thi trong ngày này</h6>
-        </div>
-      `;
-    } else {
-      dayCardsContainer.innerHTML = todaySchedules.map(s => renderScheduleCardHTML(s)).join('');
-    }
-  }
-
-  // E. Update Month View Dots
-  updateMonthDots();
+  // D. Render Month Calendar Grid & Selected Day Cards
+  renderMonthCalendar(cardsHTML);
 }
 
 function renderScheduleCardHTML(s) {
@@ -624,11 +686,13 @@ function renderScheduleCardHTML(s) {
     return `
       <div class="schedule-item-card type-exam">
         <div class="schedule-card-inner">
-          <div class="d-flex justify-content-between align-items-center mb-1">
+          <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-2">
             <span class="badge-schedule-exam"><i class="bi bi-circle-fill"></i> Lịch thi</span>
             <div class="d-flex align-items-center gap-2">
-              <button class="btn btn-sm btn-light text-secondary p-1 px-2" title="Chỉnh sửa"><i class="bi bi-pencil"></i></button>
-              <button class="btn btn-sm btn-light text-danger p-1 px-2" title="Xóa lịch" onclick="deleteSchedule('${s.id}')"><i class="bi bi-trash"></i></button>
+              <button class="btn btn-sm btn-schedule-cancel px-2 py-1" title="Báo hủy lịch thi" onclick="cancelSchedule('${s.id}')"><i class="bi bi-calendar-x me-1"></i>Hủy lịch</button>
+              <button class="btn btn-sm btn-light text-secondary p-1 px-2" title="Chỉnh sửa" onclick="editSchedule('${s.id}')"><i class="bi bi-pencil"></i></button>
+              <span class="vr text-muted opacity-25"></span>
+              <button class="btn btn-sm btn-light text-danger p-1 px-2" title="Xóa vĩnh viễn" onclick="deleteSchedule('${s.id}')"><i class="bi bi-trash"></i></button>
               <i class="bi bi-calendar3 text-muted fs-5 ms-1"></i>
             </div>
           </div>
@@ -654,9 +718,16 @@ function renderScheduleCardHTML(s) {
     return `
       <div class="schedule-item-card type-canceled">
         <div class="schedule-card-inner">
-          <div class="d-flex justify-content-between align-items-center mb-1">
-            <span class="badge-schedule-canceled"><i class="bi bi-x-circle-fill"></i> Lịch bị hủy (Nghỉ / Bù)</span>
-            <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Thông báo khẩn</span>
+          <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge-schedule-canceled"><i class="bi bi-x-circle-fill"></i> Lịch bị hủy (Nghỉ)</span>
+              <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Thông báo khẩn</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <button class="btn btn-sm btn-schedule-restore px-2 py-1" title="Khôi phục lại lịch này" onclick="restoreSchedule('${s.id}')"><i class="bi bi-arrow-counterclockwise me-1"></i>Khôi phục</button>
+              <span class="vr text-muted opacity-25"></span>
+              <button class="btn btn-sm btn-light text-danger p-1 px-2" title="Xóa vĩnh viễn" onclick="deleteSchedule('${s.id}')"><i class="bi bi-trash"></i></button>
+            </div>
           </div>
           <h5 class="schedule-course-title text-muted text-decoration-line-through">${s.course}</h5>
           <div class="alert alert-danger py-2 px-3 mb-2 small d-flex align-items-center gap-2">
@@ -682,12 +753,14 @@ function renderScheduleCardHTML(s) {
   return `
     <div class="schedule-item-card type-class">
       <div class="schedule-card-inner">
-        <div class="d-flex justify-content-between align-items-center mb-1">
+        <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-2">
           <span class="badge-schedule-class"><i class="bi bi-circle-fill"></i> Lịch học</span>
           <div class="d-flex align-items-center gap-2">
             <button class="btn btn-sm btn-light text-primary p-1 px-2" title="Điểm danh QR" onclick="document.querySelector('[data-target=\\'section-attendance\\']').click()"><i class="bi bi-qr-code-scan me-1"></i> Điểm danh</button>
-            <button class="btn btn-sm btn-light text-secondary p-1 px-2" title="Chỉnh sửa"><i class="bi bi-pencil"></i></button>
-            <button class="btn btn-sm btn-light text-danger p-1 px-2" title="Xóa lịch" onclick="deleteSchedule('${s.id}')"><i class="bi bi-trash"></i></button>
+            <button class="btn btn-sm btn-schedule-cancel px-2 py-1" title="Báo hủy lịch (Tạm nghỉ)" onclick="cancelSchedule('${s.id}')"><i class="bi bi-calendar-x me-1"></i>Hủy lịch</button>
+            <button class="btn btn-sm btn-light text-secondary p-1 px-2" title="Chỉnh sửa" onclick="editSchedule('${s.id}')"><i class="bi bi-pencil"></i></button>
+            <span class="vr text-muted opacity-25"></span>
+            <button class="btn btn-sm btn-light text-danger p-1 px-2" title="Xóa vĩnh viễn" onclick="deleteSchedule('${s.id}')"><i class="bi bi-trash"></i></button>
             <i class="bi bi-calendar3 text-muted fs-5 ms-1"></i>
           </div>
         </div>
@@ -710,48 +783,222 @@ function renderScheduleCardHTML(s) {
   `;
 }
 
-function updateMonthDots() {
-  const monthCells = document.querySelectorAll('.month-day-cell');
-  monthCells.forEach(cell => {
-    cell.classList.remove('dot-class', 'dot-exam', 'dot-canceled');
-  });
+function renderMonthCalendar(selectedDayCardsHTML) {
+  const monthHeader = document.getElementById('monthGridHeaderTitle');
+  if (monthHeader) {
+    monthHeader.innerHTML = `<i class="bi bi-calendar-month text-primary me-2"></i>Tháng ${currentSelectedMonth}, ${currentSelectedYear}`;
+  }
 
-  const dateDots = {
-    '11': 'dot-exam',
-    '12': 'dot-exam',
-    '17': 'dot-class',
-    '18': 'dot-class',
-    '19': 'dot-exam',
-    '20': 'dot-canceled'
-  };
+  const monthTimelineBadge = document.getElementById('monthTimelineBadge');
+  if (monthTimelineBadge) {
+    monthTimelineBadge.innerText = currentSelectedDayLabel;
+  }
 
-  schedulesData.forEach(s => {
-    if (s.dateStr) {
-      const parts = s.dateStr.split('-');
-      if (parts.length === 3 && parseInt(parts[1], 10) === currentSelectedMonth) {
-        const dayNum = parseInt(parts[2], 10).toString();
-        if (s.type === 'canceled') dateDots[dayNum] = 'dot-canceled';
-        else if (s.type === 'exam') dateDots[dayNum] = 'dot-exam';
-        else dateDots[dayNum] = 'dot-class';
+  const monthCardsContainer = document.getElementById('monthCardsContainer');
+  if (monthCardsContainer && selectedDayCardsHTML !== undefined) {
+    monthCardsContainer.innerHTML = selectedDayCardsHTML;
+  }
+
+  const tbody = document.getElementById('monthCalendarBody');
+  if (!tbody) return;
+
+  const year = currentSelectedYear;
+  const monthIdx = currentSelectedMonth - 1; // 0-indexed
+  const firstDay = new Date(year, monthIdx, 1);
+  const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+
+  // Monday = 0, Tuesday = 1, ..., Sunday = 6
+  const startOffset = (firstDay.getDay() + 6) % 7;
+  const selectedIso = toISODate(currentSelectedDate);
+
+  let html = '';
+  let currentDay = 1;
+  const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
+
+  for (let i = 0; i < totalCells; i++) {
+    if (i % 7 === 0) html += '<tr>';
+
+    if (i < startOffset || currentDay > daysInMonth) {
+      html += '<td></td>';
+    } else {
+      const cellDate = new Date(year, monthIdx, currentDay);
+      const cellIso = toISODate(cellDate);
+      const dayOfWeekIdx = i % 7; // 5 = Th 7, 6 = CN
+      const isWeekend = dayOfWeekIdx >= 5;
+      const isActive = cellIso === selectedIso;
+
+      const daySchedules = getSchedulesForDate(cellDate);
+      let dotClass = '';
+      if (daySchedules.length > 0) {
+        if (daySchedules.some(s => s.type === 'canceled')) dotClass = 'dot-canceled';
+        else if (daySchedules.some(s => s.type === 'exam')) dotClass = 'dot-exam';
+        else dotClass = 'dot-class';
       }
-    }
-  });
 
-  monthCells.forEach(cell => {
-    const txt = cell.innerText.trim();
-    if (dateDots[txt]) {
-      cell.classList.add(dateDots[txt]);
+      const classes = [
+        'month-day-cell',
+        isWeekend ? 'text-danger' : '',
+        isActive ? 'active-day' : '',
+        dotClass
+      ].filter(Boolean).join(' ');
+
+      html += `<td><div class="${classes}" data-date-iso="${cellIso}">${currentDay}</div></td>`;
+      currentDay++;
     }
+
+    if (i % 7 === 6) html += '</tr>';
+  }
+
+  tbody.innerHTML = html;
+
+  // Bind click events for each day cell
+  tbody.querySelectorAll('.month-day-cell').forEach(cell => {
+    cell.addEventListener('click', () => {
+      const iso = cell.getAttribute('data-date-iso');
+      if (!iso) return;
+      const parts = iso.split('-');
+      const clickedDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      syncDateState(clickedDate);
+      renderScheduleUI();
+    });
   });
 }
 
-// Global delete function
-window.deleteSchedule = function(id) {
-  if (confirm('Bạn có chắc chắn muốn xóa mục lịch này không?')) {
-    schedulesData = schedulesData.filter(s => s.id !== id);
-    renderScheduleUI();
-    showToast('Đã xóa mục lịch thành công!');
-  }
+// SweetAlert2 Bootstrap Mixin Helper
+function getSwalBootstrap() {
+  return Swal.mixin({
+    customClass: {
+      confirmButton: "btn btn-success",
+      cancelButton: "btn btn-danger"
+    },
+    buttonsStyling: false
+  });
+}
+
+// Global cancel schedule function (Báo hủy / Tạm nghỉ)
+window.cancelSchedule = function (id) {
+  const item = schedulesData.find(s => s.id === id);
+  if (!item) return;
+
+  const swalWithBootstrapButtons = getSwalBootstrap();
+  swalWithBootstrapButtons.fire({
+    title: "Xác nhận hủy lịch?",
+    text: `Lịch "${item.course}" (${item.room}) sẽ chuyển sang trạng thái Đã hủy (gạch đỏ)!`,
+    icon: "warning",
+    input: "text",
+    inputLabel: "Lý do hủy lịch (không bắt buộc)",
+    inputPlaceholder: "VD: Giảng viên bận công tác, lớp nghỉ...",
+    showCancelButton: true,
+    confirmButtonText: "Đồng ý, hủy lịch!",
+    cancelButtonText: "Không, giữ lại!",
+    reverseButtons: true
+  }).then((result) => {
+    if (result.isConfirmed) {
+      item.originalType = item.type;
+      item.type = 'canceled';
+      item.status = 'Tạm nghỉ (Đã hủy)';
+      item.canceledReason = (result.value && result.value.trim())
+        ? result.value.trim()
+        : 'Lịch đã được ban quản trị thông báo tạm nghỉ / hủy.';
+      renderScheduleUI();
+
+      swalWithBootstrapButtons.fire({
+        title: "Đã hủy lịch!",
+        text: `Lịch "${item.course}" đã chuyển sang trạng thái bị hủy.`,
+        icon: "success"
+      });
+    } else if (result.dismiss === Swal.DismissReason.cancel) {
+      swalWithBootstrapButtons.fire({
+        title: "Đã giữ nguyên",
+        text: `Lịch "${item.course}" vẫn hoạt động bình thường :)`,
+        icon: "error"
+      });
+    }
+  });
+};
+
+// Global restore schedule function (Khôi phục lịch đã hủy)
+window.restoreSchedule = function (id) {
+  const item = schedulesData.find(s => s.id === id);
+  if (!item) return;
+
+  const swalWithBootstrapButtons = getSwalBootstrap();
+  swalWithBootstrapButtons.fire({
+    title: "Khôi phục lịch này?",
+    text: `Bạn muốn mở lại lịch "${item.course}" (${item.room})?`,
+    icon: "question",
+    showCancelButton: true,
+    confirmButtonText: "Đồng ý, khôi phục!",
+    cancelButtonText: "Không, giữ hủy!",
+    reverseButtons: true
+  }).then((result) => {
+    if (result.isConfirmed) {
+      item.type = item.originalType || 'regular_class';
+      item.status = item.type === 'exam' ? 'Sắp thi' : 'Sắp diễn ra';
+      delete item.canceledReason;
+      renderScheduleUI();
+
+      swalWithBootstrapButtons.fire({
+        title: "Đã khôi phục!",
+        text: `Lịch "${item.course}" đã hoạt động trở lại.`,
+        icon: "success"
+      });
+    } else if (result.dismiss === Swal.DismissReason.cancel) {
+      swalWithBootstrapButtons.fire({
+        title: "Đã giữ nguyên",
+        text: "Lịch vẫn giữ nguyên trạng thái tạm nghỉ.",
+        icon: "error"
+      });
+    }
+  });
+};
+
+// Global edit schedule placeholder with SweetAlert2
+window.editSchedule = function (id) {
+  const item = schedulesData.find(s => s.id === id);
+  if (!item) return;
+
+  const swalWithBootstrapButtons = getSwalBootstrap();
+  swalWithBootstrapButtons.fire({
+    title: "Chỉnh sửa lịch",
+    text: `Bạn đang chọn chỉnh sửa "${item.course}" (${item.room} • ${item.timeRange}). Tính năng cập nhật chi tiết sẽ mở ở phần tiếp theo!`,
+    icon: "info",
+    confirmButtonText: "Đã hiểu"
+  });
+};
+
+// Global delete function (Xóa vĩnh viễn)
+window.deleteSchedule = function (id) {
+  const item = schedulesData.find(s => s.id === id);
+  const courseName = item ? item.course : 'mục lịch này';
+
+  const swalWithBootstrapButtons = getSwalBootstrap();
+  swalWithBootstrapButtons.fire({
+    title: "Bạn chắc chắn muốn xóa?",
+    text: `Bạn sẽ không thể hoàn tác sau khi xóa vĩnh viễn "${courseName}"!`,
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Có, xóa luôn!",
+    cancelButtonText: "Không, hủy bỏ!",
+    reverseButtons: true
+  }).then((result) => {
+    if (result.isConfirmed) {
+      schedulesData = schedulesData.filter(s => s.id !== id);
+      renderScheduleUI();
+
+      swalWithBootstrapButtons.fire({
+        title: "Đã xóa!",
+        text: `Mục lịch "${courseName}" đã bị xóa khỏi danh sách.`,
+        icon: "success"
+      });
+    } else if (result.dismiss === Swal.DismissReason.cancel) {
+      swalWithBootstrapButtons.fire({
+        title: "Đã hủy thao tác",
+        text: `Lịch "${courseName}" của bạn vẫn an toàn :)`,
+        icon: "error"
+      });
+    }
+  });
 };
 
 // =========================================================================
@@ -759,7 +1006,7 @@ window.deleteSchedule = function(id) {
 // =========================================================================
 
 function initScheduleViews() {
-  // A. Segmented Switcher [ Ngày | Tuần | Tháng | Dạng bảng ]
+  // A. Segmented Switcher [ Ngày | Tuần | Tháng ]
   const segmentedBtns = document.querySelectorAll('#scheduleSegmentedNav .nav-btn');
   const subviews = document.querySelectorAll('.schedule-subview');
 
@@ -775,6 +1022,7 @@ function initScheduleViews() {
         if (activeView) {
           activeView.classList.remove('d-none');
         }
+        renderScheduleUI();
       });
     });
   }
@@ -785,8 +1033,14 @@ function initScheduleViews() {
   const pickerYearDisplay = document.getElementById('pickerYearDisplay');
   const prevYearBtn = document.getElementById('prevYearBtn');
   const nextYearBtn = document.getElementById('nextYearBtn');
-  const currentMonthYearLabel = document.getElementById('currentMonthYearLabel');
   const monthBtns = document.querySelectorAll('.month-btn-item');
+
+  function applyMonthYearChange(newYear, newMonth) {
+    const maxDay = new Date(newYear, newMonth, 0).getDate();
+    const clampedDay = Math.min(currentSelectedDate.getDate(), maxDay);
+    syncDateState(new Date(newYear, newMonth - 1, clampedDay));
+    renderScheduleUI();
+  }
 
   if (pickerBtn && pickerPopup) {
     pickerBtn.addEventListener('click', (e) => {
@@ -803,68 +1057,55 @@ function initScheduleViews() {
     if (prevYearBtn && nextYearBtn && pickerYearDisplay) {
       prevYearBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        currentSelectedYear--;
-        pickerYearDisplay.innerText = currentSelectedYear;
-        updateMonthYearDisplay();
+        applyMonthYearChange(currentSelectedYear - 1, currentSelectedMonth);
       });
 
       nextYearBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        currentSelectedYear++;
-        pickerYearDisplay.innerText = currentSelectedYear;
-        updateMonthYearDisplay();
+        applyMonthYearChange(currentSelectedYear + 1, currentSelectedMonth);
       });
     }
 
     monthBtns.forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        monthBtns.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        currentSelectedMonth = parseInt(btn.getAttribute('data-month'), 10);
-        updateMonthYearDisplay();
+        const chosenMonth = parseInt(btn.getAttribute('data-month'), 10);
+        applyMonthYearChange(currentSelectedYear, chosenMonth);
         pickerPopup.classList.remove('show');
-        showToast(`Đã chọn tháng ${currentSelectedMonth}, năm ${currentSelectedYear}`);
       });
     });
-  }
-
-  function updateMonthYearDisplay() {
-    if (currentMonthYearLabel) {
-      currentMonthYearLabel.innerText = `tháng ${currentSelectedMonth}, ${currentSelectedYear}`;
-    }
-    const monthHeader = document.getElementById('monthGridHeaderTitle');
-    if (monthHeader) {
-      monthHeader.innerText = `Tháng ${currentSelectedMonth}, ${currentSelectedYear}`;
-    }
   }
 
   // C. Week Day Strip click handler
   const weekItems = document.querySelectorAll('.week-day-item');
   weekItems.forEach(item => {
     item.addEventListener('click', () => {
-      weekItems.forEach(w => w.classList.remove('active'));
-      item.classList.add('active');
-
-      currentSelectedDayKey = item.getAttribute('data-day-key');
-      currentSelectedDayLabel = item.getAttribute('data-day-label');
-
+      const iso = item.getAttribute('data-date-iso');
+      if (iso) {
+        const parts = iso.split('-');
+        syncDateState(new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10)));
+      }
       renderScheduleUI();
     });
   });
 
-  // D. Month Day Cell click handler
-  const monthCells = document.querySelectorAll('.month-day-cell');
-  monthCells.forEach(cell => {
-    cell.addEventListener('click', () => {
-      monthCells.forEach(c => c.classList.remove('active-day'));
-      cell.classList.add('active-day');
-      const dateText = cell.getAttribute('data-date');
-      if (dateText) {
-        showToast('Đã chọn ngày: ' + dateText);
-      }
+  // D. Day View Prev / Next Day buttons
+  const prevDayBtn = document.getElementById('prevDayBtn');
+  const nextDayBtn = document.getElementById('nextDayBtn');
+  if (prevDayBtn) {
+    prevDayBtn.addEventListener('click', () => {
+      const prev = new Date(currentSelectedDate.getFullYear(), currentSelectedDate.getMonth(), currentSelectedDate.getDate() - 1);
+      syncDateState(prev);
+      renderScheduleUI();
     });
-  });
+  }
+  if (nextDayBtn) {
+    nextDayBtn.addEventListener('click', () => {
+      const next = new Date(currentSelectedDate.getFullYear(), currentSelectedDate.getMonth(), currentSelectedDate.getDate() + 1);
+      syncDateState(next);
+      renderScheduleUI();
+    });
+  }
 
   // Initial render
   renderScheduleUI();
@@ -1458,16 +1699,19 @@ function initAddScheduleModal() {
       schedulesData.unshift(newSchedule);
 
       // Chuyển view ngày sang ngày có lịch mới để xem trực quan
-      currentSelectedDayKey = targetDayKey;
-      currentSelectedDayLabel = convertDayKeyToLabel(targetDayKey);
-
-      document.querySelectorAll('.week-day-item').forEach(w => {
-        if (w.getAttribute('data-day-key') === targetDayKey) {
-          w.classList.add('active');
-        } else {
-          w.classList.remove('active');
+      if (targetDateStr) {
+        const p = targetDateStr.split('-');
+        syncDateState(new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10)));
+      } else if (regularStartDate.value) {
+        const p = regularStartDate.value.split('-');
+        let d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+        // Tìm ngày đầu tiên khớp thứ trong tuần từ ngày bắt đầu
+        for (let i = 0; i < 7; i++) {
+          if (getDayKeyFromDate(d) === targetDayKey) break;
+          d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
         }
-      });
+        syncDateState(d);
+      }
 
       // Render lại giao diện
       renderScheduleUI();
@@ -1478,9 +1722,14 @@ function initAddScheduleModal() {
         bsModal.hide();
       }
 
-      // Thông báo thành công
+      // Thông báo thành công bằng SweetAlert2
       const typeLabel = currentScheduleType === 'exam' ? 'Lịch thi' : 'Lịch học';
-      showToast(`Đã thêm thành công ${typeLabel}: ${newSchedule.course} (${newSchedule.room})!`);
+      getSwalBootstrap().fire({
+        title: `Đã thêm ${typeLabel}!`,
+        text: `${newSchedule.course} (${newSchedule.room}) đã được thêm thành công.`,
+        icon: "success",
+        confirmButtonText: "Hoàn tất"
+      });
     });
   }
 

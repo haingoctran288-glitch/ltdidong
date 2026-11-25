@@ -936,6 +936,44 @@ body {
   }
 }
 
+/* Nút Hủy lịch & Khôi phục lịch tách biệt với nút Xóa */
+.btn-schedule-cancel {
+  background-color: #fff7ed;
+  color: #d97706;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  transition: all 0.2s ease;
+}
+
+.btn-schedule-cancel:hover {
+  background-color: #fef3c7;
+  color: #b45309;
+  border-color: #f59e0b;
+}
+
+.btn-schedule-restore {
+  background-color: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  transition: all 0.2s ease;
+}
+
+.btn-schedule-restore:hover {
+  background-color: #d1fae5;
+  color: #047857;
+  border-color: #10b981;
+}
+
+/* Khoảng cách cho các nút Bootstrap trong SweetAlert2 */
+.swal2-actions {
+  gap: 12px !important;
+}
+
 /* Mobile responsive */
 @media (max-width: 991px) {
   .sidebar {
