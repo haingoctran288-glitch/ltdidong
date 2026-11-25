@@ -974,6 +974,164 @@ body {
   gap: 12px !important;
 }
 
+/* ================= ATTENDANCE & QR TABLE ================= */
+.att-date-pill {
+  border: 1px solid var(--slate-200);
+  background: #ffffff;
+  color: var(--slate-600);
+  font-weight: 600;
+  font-size: 0.82rem;
+  padding: 4px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.att-date-pill:hover {
+  background: var(--slate-100);
+  color: var(--dark);
+}
+
+.att-date-pill.active {
+  background: #4f46e5;
+  color: #ffffff;
+  border-color: #4f46e5;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.28);
+}
+
+.att-date-pill.future {
+  background: #f8fafc;
+  color: #94a3b8;
+  border-style: dashed;
+}
+
+.att-date-pill.future.active {
+  background: #64748b;
+  color: #ffffff;
+  border-color: #64748b;
+}
+
+.att-cell {
+  cursor: pointer;
+  user-select: none;
+  text-align: center;
+  vertical-align: middle;
+  min-width: 72px;
+  transition: background-color 0.15s ease;
+}
+
+.att-cell:hover {
+  background-color: #eef2ff !important;
+}
+
+.att-cell.att-cell-future {
+  cursor: not-allowed;
+  background-color: #f8fafc;
+}
+
+.att-cell.att-cell-future:hover {
+  background-color: #f8fafc !important;
+}
+
+.att-future-mark {
+  color: #cbd5e1;
+  font-weight: 700;
+  font-size: 1rem;
+  user-select: none;
+}
+
+.att-absent-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  background-color: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  font-weight: 800;
+  font-size: 0.92rem;
+}
+
+.att-row-flash {
+  animation: attFlashRow 1.1s ease;
+}
+
+@keyframes attFlashRow {
+  0% { background-color: #dcfce7; }
+  100% { background-color: transparent; }
+}
+
+/* Sticky Header & Sticky Left Columns (STT, Mã SV, Họ và tên) for Large Classes */
+.att-table-scroll-wrapper {
+  max-height: 520px;
+  overflow: auto;
+  position: relative;
+  border-bottom: 1px solid var(--slate-200);
+}
+
+.att-table-scroll-wrapper.expanded {
+  max-height: 640px;
+}
+
+.att-sticky-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+}
+
+.att-sticky-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background-color: #f8fafc !important;
+  border-bottom: 2px solid var(--slate-200) !important;
+  white-space: nowrap;
+}
+
+.att-sticky-table .att-col-stt {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background-color: #ffffff;
+  width: 54px;
+  min-width: 54px;
+  max-width: 54px;
+}
+
+.att-sticky-table .att-col-mssv {
+  position: sticky;
+  left: 54px;
+  z-index: 2;
+  background-color: #ffffff;
+  width: 112px;
+  min-width: 112px;
+  max-width: 112px;
+}
+
+.att-sticky-table .att-col-name {
+  position: sticky;
+  left: 166px;
+  z-index: 2;
+  background-color: #ffffff;
+  min-width: 175px;
+  box-shadow: 3px 0 6px -3px rgba(15, 23, 42, 0.12);
+}
+
+.att-sticky-table thead th.att-col-stt,
+.att-sticky-table thead th.att-col-mssv,
+.att-sticky-table thead th.att-col-name {
+  z-index: 5 !important;
+  background-color: #f8fafc !important;
+}
+
+.att-sticky-table tbody tr:hover td.att-col-stt,
+.att-sticky-table tbody tr:hover td.att-col-mssv,
+.att-sticky-table tbody tr:hover td.att-col-name {
+  background-color: #f8fafc;
+}
+
 /* Mobile responsive */
 @media (max-width: 991px) {
   .sidebar {

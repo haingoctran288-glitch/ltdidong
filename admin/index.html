@@ -556,87 +556,126 @@
       <!-- ================= 4. SECTION: ATTENDANCE & QR ================= -->
       <section id="section-attendance" class="page-section d-none">
         <div class="row g-4">
-          <!-- Left: QR Generator & Screen -->
-          <div class="col-lg-5">
+          <!-- Left: QR Generator (5s Auto-Refresh) -->
+          <div class="col-lg-4" id="attQrColumn">
             <div class="qr-container">
-              <span class="pulse-badge mb-2">
-                <span class="pulse-dot"></span> ĐANG PHÁT MÃ ĐIỂM DANH TRỰC TIẾP
+              <span class="pulse-badge mb-2" id="qr-session-badge">
+                <span class="pulse-dot" id="qr-pulse-dot"></span> <span id="qr-session-status-text">ĐANG PHÁT MÃ ĐIỂM DANH TRỰC TIẾP</span>
               </span>
-              <h5 class="fw-bold mt-2">Lập Trình Di Động - Ca 1</h5>
-              <p class="text-white-50 mb-0" style="font-size: 0.85rem;">Phòng A2-305 • GV: ThS. Nguyễn Văn A</p>
+              <h5 class="fw-bold mt-2" id="qr-course-title">Thực hành lập trình di động</h5>
+              <p class="text-white-50 mb-1" id="qr-course-meta" style="font-size: 0.85rem;">Phòng D207 • GV: Nguyễn Văn A</p>
+              <div class="mb-1">
+                <span class="badge bg-white bg-opacity-25 text-white px-2 py-1" id="qr-course-date-badge" style="font-size: 0.78rem;">
+                  <i class="bi bi-calendar-event me-1"></i>Ngày 25/11/2026
+                </span>
+              </div>
 
               <!-- QR CODE BOX -->
               <div class="qr-box">
                 <div id="qrcode-display"></div>
               </div>
 
-              <!-- COUNTDOWN TIMER -->
-              <div class="px-4">
+              <!-- COUNTDOWN TIMER (5s) -->
+              <div class="px-3">
                 <div class="d-flex justify-content-between mb-1" style="font-size: 0.85rem;">
                   <span>Mã QR tự động đổi sau:</span>
-                  <strong id="qr-countdown-text" class="text-warning">30s</strong>
+                  <strong id="qr-countdown-text" class="text-warning">5s</strong>
                 </div>
                 <div class="progress" style="height: 6px; background-color: rgba(255,255,255,0.2);">
                   <div id="qr-progress-bar" class="progress-bar bg-success" style="width: 100%;"></div>
                 </div>
               </div>
 
-              <div class="mt-4 d-flex justify-content-center gap-2">
-                <button class="btn btn-sm btn-light px-3 fw-semibold" id="btn-refresh-qr">
+              <div class="mt-4 d-flex justify-content-center gap-2 flex-wrap">
+                <button type="button" class="btn btn-sm btn-light px-3 fw-semibold" id="btn-refresh-qr">
                   <i class="bi bi-arrow-clockwise me-1"></i> Đổi Mã Ngay
                 </button>
-                <button class="btn btn-sm btn-outline-light px-3" onclick="showToast('Đã dừng phiên điểm danh!')">
+                <button type="button" class="btn btn-sm btn-outline-light px-3" id="btn-toggle-qr-session">
                   <i class="bi bi-stop-circle me-1"></i> Kết thúc phiên
                 </button>
               </div>
             </div>
           </div>
 
-          <!-- Right: Realtime Student Check-in List -->
-          <div class="col-lg-7">
-            <div class="content-card h-100">
-              <div class="card-header-custom">
-                <h6 class="card-title-custom"><i class="bi bi-person-check-fill text-success"></i> Danh sách sinh viên đã điểm danh (Thời gian thực)</h6>
-                <span class="badge bg-success-subtle text-success px-2 py-1">Tự động nhận diện</span>
+          <!-- Right: Fixed Student Attendance Table (100 SV, Sticky Header/Cols, Pagination) -->
+          <div class="col-lg-8" id="attTableColumn">
+            <div class="content-card h-100 d-flex flex-column">
+              <div class="card-header-custom flex-wrap gap-2">
+                <div>
+                  <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <h6 class="card-title-custom mb-0"><i class="bi bi-table text-primary"></i> Bảng Điểm Danh Sinh Viên</h6>
+                    <span class="badge bg-info-subtle text-info border border-info-subtle" id="attTodayBadge">Hôm nay: 25/11/2026</span>
+                  </div>
+                  <small class="text-muted">Để trống: Có mặt | <span class="text-danger fw-bold">X</span>: Vắng mặt | <span class="text-secondary fw-bold">—</span>: Chưa diễn ra</small>
+                </div>
+
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                  <!-- View Mode Switcher: Theo từng ngày | Bảng tổng hợp cuối cùng -->
+                  <div class="schedule-nav-segmented" id="attendanceModeNav">
+                    <button type="button" class="nav-btn active" data-att-mode="daily">Theo từng ngày</button>
+                    <button type="button" class="nav-btn" data-att-mode="summary">Bảng tổng hợp cuối cùng</button>
+                  </div>
+
+                  <button type="button" class="btn btn-sm btn-outline-primary fw-semibold px-2 py-1 rounded-3" id="btnToggleExpandAttendance" title="Ẩn tạm cột QR để xem bảng rộng hơn">
+                    <i class="bi bi-arrows-fullscreen me-1"></i> Mở rộng bảng
+                  </button>
+                </div>
               </div>
-              <div class="table-responsive">
-                <table class="table table-custom">
-                  <thead>
-                    <tr>
-                      <th>MSSV</th>
-                      <th>Họ và Tên</th>
-                      <th>Lớp</th>
-                      <th>Thời Gian Quét</th>
-                      <th>Trạng Thái</th>
-                    </tr>
-                  </thead>
-                  <tbody id="live-attendance-list">
-                    <tr>
-                      <td><strong>21050189</strong></td>
-                      <td>
-                        <div class="d-flex align-items-center gap-2">
-                          <div class="avatar-sm bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width:28px;height:28px;font-size:11px;font-weight:700">NA</div>
-                          <span>Nguyễn Văn An</span>
-                        </div>
-                      </td>
-                      <td>D19-CNTT01</td>
-                      <td>07:31:14</td>
-                      <td><span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-circle-fill me-1"></i>Hợp lệ (QR)</span></td>
-                    </tr>
-                    <tr>
-                      <td><strong>21050234</strong></td>
-                      <td>
-                        <div class="d-flex align-items-center gap-2">
-                          <div class="avatar-sm bg-success text-white rounded-circle d-flex align-items-center justify-content-center" style="width:28px;height:28px;font-size:11px;font-weight:700">TM</div>
-                          <span>Trần Thị Mai</span>
-                        </div>
-                      </td>
-                      <td>D19-CNTT02</td>
-                      <td>07:32:05</td>
-                      <td><span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-circle-fill me-1"></i>Hợp lệ (QR)</span></td>
-                    </tr>
-                  </tbody>
+
+              <!-- Sub-toolbar: Course Selector + Date pills for "Theo từng ngày" mode -->
+              <div class="px-4 py-2 border-bottom bg-light d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                  <span class="small fw-semibold text-secondary">Môn học:</span>
+                  <select class="form-select form-select-sm form-select-custom fw-semibold" id="attCourseSelect" style="width: auto; min-width: 230px;"></select>
+                </div>
+                <span class="badge bg-primary-subtle text-primary border px-2 py-1" id="attendanceDailyStatsBadge">Có mặt: 0 / 0</span>
+              </div>
+
+              <div id="attendanceDailyToolbar" class="px-4 py-2 border-bottom bg-light d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                  <span class="small fw-semibold text-secondary">Buổi học:</span>
+                  <div class="d-flex gap-1 flex-wrap" id="attendanceDatePills"></div>
+                </div>
+                <span class="small fw-semibold text-muted" id="attSessionStateNote"></span>
+              </div>
+
+              <!-- Search, Class Filter & Page Size Toolbar -->
+              <div class="px-4 py-2 border-bottom bg-white d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap flex-grow-1">
+                  <div class="input-group input-group-sm" style="max-width: 260px;">
+                    <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control border-start-0 bg-light" id="attSearchInput" placeholder="Tìm Họ tên hoặc Mã SV...">
+                  </div>
+
+                  <select class="form-select form-select-sm form-select-custom" id="attClassFilter" style="width: auto; min-width: 145px;">
+                    <option value="all">Tất cả lớp</option>
+                  </select>
+                </div>
+
+                <div class="d-flex align-items-center gap-2">
+                  <span class="small text-muted text-nowrap">Hiển thị:</span>
+                  <select class="form-select form-select-sm form-select-custom" id="attPageSizeSelect" style="width: auto;">
+                    <option value="20" selected>20 dòng / trang</option>
+                    <option value="50">50 dòng / trang</option>
+                    <option value="all">Xem tất cả (100 SV)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Scrollable Table Container with Sticky Header & Sticky Left Columns -->
+              <div class="att-table-scroll-wrapper">
+                <table class="table table-custom table-bordered align-middle mb-0 att-sticky-table" id="attendanceTable">
+                  <thead id="attendanceTableHead"></thead>
+                  <tbody id="attendanceTableBody"></tbody>
                 </table>
+              </div>
+
+              <!-- Pagination Footer -->
+              <div class="px-4 py-2 border-top bg-light d-flex align-items-center justify-content-between flex-wrap gap-2 mt-auto">
+                <small class="text-muted fw-semibold" id="attPaginationInfo">Hiển thị 1–20 trên tổng số 100 sinh viên</small>
+                <nav aria-label="Phân trang điểm danh">
+                  <ul class="pagination pagination-sm mb-0" id="attPaginationControls"></ul>
+                </nav>
               </div>
             </div>
           </div>
@@ -902,6 +941,9 @@
                 <button type="button" class="schedule-type-btn flex-fill py-2 px-3 rounded-3 border-0 fw-bold text-center" data-type="regular_class">
                   <i class="bi bi-calendar-check-fill me-1 text-warning"></i> Lịch học định kỳ
                 </button>
+                <button type="button" class="schedule-type-btn flex-fill py-2 px-3 rounded-3 border-0 fw-bold text-center" data-type="makeup_class">
+                  <i class="bi bi-arrow-repeat me-1 text-info"></i> Lịch học bù
+                </button>
                 <button type="button" class="schedule-type-btn flex-fill py-2 px-3 rounded-3 border-0 fw-bold text-center" data-type="exam">
                   <i class="bi bi-clipboard2-check-fill me-1 text-success"></i> Lịch thi
                 </button>
@@ -1065,14 +1107,26 @@
                 </div>
               </div>
 
-              <!-- B. Nhóm thời gian cho: Lịch thi -->
+              <!-- B. Nhóm thời gian cho: Lịch thi / Lịch học bù -->
               <div id="timeGroupSpecific" class="d-none">
                 <div class="row g-3">
-                  <!-- Ngày thi -->
+                  <!-- Ngày thi / Ngày học bù -->
                   <div class="col-md-6" id="groupSpecificDate">
-                    <label class="form-label small fw-semibold text-secondary">Ngày diễn ra thi <span class="text-danger">*</span></label>
+                    <label class="form-label small fw-semibold text-secondary" id="labelSpecificDate">Ngày diễn ra <span class="text-danger">*</span></label>
                     <input type="date" class="form-control" id="modalSpecificDate" value="">
-                    <div class="field-error-msg d-none" id="errorSpecificDate"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn Ngày diễn ra thi</div>
+                    <div class="field-error-msg d-none" id="errorSpecificDate"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn Ngày diễn ra</div>
+                  </div>
+
+                  <!-- Ca học bù (chỉ hiện khi chọn Lịch học bù) -->
+                  <div class="col-md-6 d-none" id="groupMakeupTime">
+                    <label class="form-label small fw-semibold text-secondary">Ca học bù <span class="text-danger">*</span></label>
+                    <select class="form-select form-select-custom" id="modalMakeupShift">
+                      <option value="" selected disabled>-- Chọn Ca học bù --</option>
+                      <option value="1 - 4|07:30 - 11:30">Sáng: Tiết 1 - 4 (07:30 - 11:30)</option>
+                      <option value="6 - 10|12:30 - 16:30">Chiều: Tiết 6 - 10 (12:30 - 16:30)</option>
+                      <option value="11 - 13|17:30 - 19:45">Tối: Tiết 11 - 13 (17:30 - 19:45)</option>
+                    </select>
+                    <div class="field-error-msg d-none" id="errorMakeupShift"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn Ca học bù</div>
                   </div>
 
                   <!-- Giờ thi nhập tay: Nhập 12 rồi tự chuyển qua phút 30 -> hiện 12h30 -->

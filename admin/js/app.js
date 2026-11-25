@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initNavigation();
   initCharts();
   initQRCode();
+  initAttendanceManager();
   initFilterAndSearch();
   initScheduleViews();
   initAddScheduleModal();
@@ -128,29 +129,53 @@ function initCharts() {
 }
 
 // =========================================================================
-// 3. Dynamic QR Code Generator for Attendance
+// 3. Dynamic QR Code Generator (5s Auto-Refresh) & Fixed Attendance Table
 // =========================================================================
+const QR_INTERVAL_SECONDS = 5;
 let qrCountdownInterval = null;
 let qrCodeInstance = null;
-let currentRemainingTime = 30;
+let currentRemainingTime = QR_INTERVAL_SECONDS;
+let isQrSessionActive = true;
 
 function initQRCode() {
   const qrTarget = document.getElementById('qrcode-display');
   const timerDisplay = document.getElementById('qr-countdown-text');
   const progressBar = document.getElementById('qr-progress-bar');
   const btnRefreshQR = document.getElementById('btn-refresh-qr');
+  const btnToggleSession = document.getElementById('btn-toggle-qr-session');
+  const sessionStatusText = document.getElementById('qr-session-status-text');
+  const pulseDot = document.getElementById('qr-pulse-dot');
 
   if (!qrTarget) return;
+
+  function renderTimerUI() {
+    if (timerDisplay) {
+      timerDisplay.innerText = isQrSessionActive ? `${currentRemainingTime}s` : 'Đã dừng';
+    }
+    if (progressBar) {
+      const percent = isQrSessionActive ? (currentRemainingTime / QR_INTERVAL_SECONDS) * 100 : 0;
+      progressBar.style.width = `${percent}%`;
+      if (percent <= 25) {
+        progressBar.className = 'progress-bar bg-danger';
+      } else if (percent <= 60) {
+        progressBar.className = 'progress-bar bg-warning';
+      } else {
+        progressBar.className = 'progress-bar bg-success';
+      }
+    }
+  }
 
   function generateNewQR() {
     const timestamp = Date.now();
     const token = 'ATTEND_' + Math.random().toString(36).substring(2, 9).toUpperCase() + '_' + timestamp;
+    const courseParam = encodeURIComponent(typeof currentAttCourse !== 'undefined' ? currentAttCourse : '');
+    const dateParam = encodeURIComponent(typeof currentAttendanceDateIso !== 'undefined' ? currentAttendanceDateIso : '');
 
     qrTarget.innerHTML = '';
 
     if (typeof QRCode !== 'undefined') {
       qrCodeInstance = new QRCode(qrTarget, {
-        text: `unistudent://checkin?code=${token}`,
+        text: `unistudent://checkin?course=${courseParam}&date=${dateParam}&code=${token}`,
         width: 190,
         height: 190,
         colorDark: '#1e1b4b',
@@ -159,82 +184,608 @@ function initQRCode() {
       });
     }
 
-    currentRemainingTime = 30;
-    updateTimer();
+    isQrSessionActive = true;
+    currentRemainingTime = QR_INTERVAL_SECONDS;
+    updateSessionUIState();
+    renderTimerUI();
+    startCountdown();
   }
 
-  function updateTimer() {
+  window.regenerateAttendanceQR = generateNewQR;
+
+  function updateSessionUIState() {
+    if (sessionStatusText) {
+      sessionStatusText.innerText = isQrSessionActive ? 'ĐANG PHÁT MÃ ĐIỂM DANH TRỰC TIẾP' : 'PHIÊN ĐIỂM DANH ĐÃ TẠM DỪNG';
+    }
+    if (pulseDot) {
+      pulseDot.style.backgroundColor = isQrSessionActive ? '#22c55e' : '#ef4444';
+    }
+    if (btnToggleSession) {
+      btnToggleSession.innerHTML = isQrSessionActive
+        ? '<i class="bi bi-stop-circle me-1"></i> Kết thúc phiên'
+        : '<i class="bi bi-play-circle me-1"></i> Bắt đầu lại';
+    }
+  }
+
+  function startCountdown() {
     clearInterval(qrCountdownInterval);
     qrCountdownInterval = setInterval(() => {
-      currentRemainingTime--;
-      if (timerDisplay) {
-        timerDisplay.innerText = `${currentRemainingTime}s`;
-      }
-      if (progressBar) {
-        const percent = (currentRemainingTime / 30) * 100;
-        progressBar.style.width = `${percent}%`;
-        if (percent < 30) {
-          progressBar.className = 'progress-bar bg-danger';
-        } else if (percent < 60) {
-          progressBar.className = 'progress-bar bg-warning';
-        } else {
-          progressBar.className = 'progress-bar bg-success';
-        }
-      }
+      if (!isQrSessionActive) return;
 
+      currentRemainingTime--;
       if (currentRemainingTime <= 0) {
         generateNewQR();
-        simulateRealtimeCheckin();
+        return;
       }
+      renderTimerUI();
     }, 1000);
   }
 
   if (btnRefreshQR) {
     btnRefreshQR.addEventListener('click', () => {
       generateNewQR();
-      showToast('Đã làm mới mã QR điểm danh!');
+      showToast('Đã đổi mã QR mới và đặt lại bộ đếm 5s!');
+    });
+  }
+
+  if (btnToggleSession) {
+    btnToggleSession.addEventListener('click', () => {
+      if (isQrSessionActive) {
+        isQrSessionActive = false;
+        clearInterval(qrCountdownInterval);
+        updateSessionUIState();
+        renderTimerUI();
+        showToast('Đã kết thúc phiên điểm danh!');
+      } else {
+        generateNewQR();
+        showToast('Đã mở lại phiên điểm danh trực tiếp!');
+      }
     });
   }
 
   generateNewQR();
 }
 
-function simulateRealtimeCheckin() {
-  const tableBody = document.getElementById('live-attendance-list');
-  if (!tableBody) return;
+// Mốc ngày hiện tại giả lập: 25/11/2026
+const SIMULATED_TODAY_ISO = '2026-11-25';
 
-  const mockStudents = [
-    { id: '21050189', name: 'Nguyễn Văn An', class: 'D19-CNTT01', room: 'A2-301' },
-    { id: '21050234', name: 'Trần Thị Mai', class: 'D19-CNTT02', room: 'A2-301' },
-    { id: '21050302', name: 'Lê Hoàng Nam', class: 'D19-CNTT01', room: 'A2-301' },
-    { id: '21050411', name: 'Phạm Minh Đức', class: 'D19-CNTT03', room: 'A2-301' }
-  ];
+function getSessionTimeStatus(isoDate) {
+  if (isoDate < SIMULATED_TODAY_ISO) return 'past';      // Đã diễn ra
+  if (isoDate === SIMULATED_TODAY_ISO) return 'ongoing'; // Đang diễn ra (Hôm nay)
+  return 'future';                                       // Chưa diễn ra (Tương lai)
+}
 
-  const randomStudent = mockStudents[Math.floor(Math.random() * mockStudents.length)];
-  const now = new Date();
-  const timeString = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+function formatShortDayMonth(isoDate) {
+  const parts = isoDate.split('-');
+  if (parts.length !== 3) return isoDate;
+  return `${parts[2]}/${parts[1]}`;
+}
 
-  const row = document.createElement('tr');
-  row.className = 'table-success fade-in-row';
-  row.innerHTML = `
-    <td><strong>${randomStudent.id}</strong></td>
-    <td>
-      <div class="d-flex align-items-center gap-2">
-        <div class="avatar-sm bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width:28px;height:28px;font-size:11px;font-weight:700">
-          ${randomStudent.name.charAt(0)}
-        </div>
-        <span>${randomStudent.name}</span>
-      </div>
-    </td>
-    <td>${randomStudent.class}</td>
-    <td>${timeString}</td>
-    <td><span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-circle-fill me-1"></i>Hợp lệ (QR)</span></td>
+// Sinh động danh sách các buổi học hợp lệ từ dữ liệu Lịch học & Lịch thi (schedulesData)
+function getValidAttendanceSessions(courseName) {
+  if (typeof schedulesData === 'undefined') return [];
+
+  const canceledSet = new Set();
+  const sessionMap = new Map();
+
+  // 1. Thu thập các ngày bị hủy (cả đơn lẻ lẫn từng ngày hủy của lịch định kỳ)
+  schedulesData.forEach(s => {
+    if (s.course !== courseName) return;
+    if (s.type === 'canceled' && s.dateStr) {
+      canceledSet.add(s.dateStr);
+    }
+    if (Array.isArray(s.canceledDates)) {
+      s.canceledDates.forEach(d => canceledSet.add(d));
+    }
+  });
+
+  // 2. Sinh các buổi từ Lịch học định kỳ và Lịch học bù
+  schedulesData.forEach(s => {
+    if (s.course !== courseName) return;
+
+    if (s.type === 'regular_class') {
+      let startD = new Date(2026, 10, 16);
+      let endD = new Date(2026, 11, 20); // Hiển thị tối đa đến giữa tháng 12 để gọn bảng
+      if (s.dateRange) {
+        const delim = s.dateRange.includes('đến') ? 'đến' : ' - ';
+        const parts = s.dateRange.split(delim).map(p => p.trim());
+        if (parts.length === 2) {
+          const pStart = parseVNDateToObj(parts[0]);
+          const pEnd = parseVNDateToObj(parts[1]);
+          if (pStart) startD = pStart;
+          if (pEnd) {
+            const capD = new Date(startD.getFullYear(), startD.getMonth(), startD.getDate() + 35);
+            endD = pEnd < capD ? pEnd : capD;
+          }
+        }
+      }
+
+      let cursor = new Date(startD.getFullYear(), startD.getMonth(), startD.getDate());
+      while (cursor <= endD) {
+        const iso = toISODate(cursor);
+        if (getDayKeyFromDate(cursor) === s.dayKey && !canceledSet.has(iso)) {
+          if (!sessionMap.has(iso)) {
+            sessionMap.set(iso, {
+              iso,
+              label: formatShortDayMonth(iso),
+              isMakeup: false,
+              status: getSessionTimeStatus(iso)
+            });
+          }
+        }
+        cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
+      }
+    } else if (s.type === 'makeup_class' && s.dateStr && !canceledSet.has(s.dateStr)) {
+      sessionMap.set(s.dateStr, {
+        iso: s.dateStr,
+        label: formatShortDayMonth(s.dateStr),
+        isMakeup: true,
+        status: getSessionTimeStatus(s.dateStr)
+      });
+    }
+  });
+
+  return Array.from(sessionMap.values()).sort((a, b) => a.iso.localeCompare(b.iso));
+}
+
+// Mock Data: Danh sách 100 sinh viên cố định
+function generateMockAttendanceStudents(count = 100) {
+  const ho = ['Nguyễn', 'Trần', 'Lê', 'Phạm', 'Hoàng', 'Vũ', 'Đặng', 'Bùi', 'Đỗ', 'Hồ', 'Ngô', 'Dương'];
+  const dem = ['Văn', 'Thị', 'Hoàng', 'Minh', 'Ngọc', 'Quang', 'Thu', 'Thanh', 'Anh', 'Đức', 'Bảo', 'Gia'];
+  const ten = ['An', 'Bích', 'Cường', 'Đức', 'Hân', 'Huy', 'Lan', 'Tùng', 'Hải', 'Linh', 'Khánh', 'Trang', 'Nam', 'Vy', 'Phúc', 'Nhi'];
+  const classes = ['D21-CNTT01', 'D21-CNTT02', 'D21-CNTT03'];
+
+  const list = [];
+  for (let i = 1; i <= count; i++) {
+    const mssv = `2105${String(100 + i).padStart(4, '0')}`;
+    const fullName = `${ho[(i * 3) % ho.length]} ${dem[(i * 5) % dem.length]} ${ten[(i * 7) % ten.length]}`;
+    const day = String(((i * 3) % 28) + 1).padStart(2, '0');
+    const month = String(((i * 2) % 12) + 1).padStart(2, '0');
+    const dob = `${day}/${month}/2003`;
+    const className = classes[(i - 1) % classes.length];
+
+    list.push({
+      stt: i,
+      mssv,
+      name: fullName,
+      dob,
+      className,
+      records: {}
+    });
+  }
+  return list;
+}
+
+const attendanceStudents = generateMockAttendanceStudents(100);
+
+function getStudentAttendanceStatus(student, isoDate) {
+  if (Object.prototype.hasOwnProperty.call(student.records, isoDate)) {
+    return student.records[isoDate];
+  }
+  // Tạo trạng thái mặc định ổn định cho các buổi đã/đang diễn ra (~15% vắng)
+  const dayNum = parseInt(isoDate.split('-')[2] || '1', 10);
+  const seed = (student.stt * 13 + dayNum * 7) % 19;
+  const val = seed !== 0 && seed !== 11 && !(student.stt % 9 === 0 && dayNum % 2 === 1);
+  student.records[isoDate] = val;
+  return val;
+}
+
+let currentAttCourse = 'Thực hành lập trình di động';
+let currentAttendanceMode = 'daily'; // 'daily' | 'summary'
+let currentAttendanceDateIso = SIMULATED_TODAY_ISO;
+let currentAttSearch = '';
+let currentAttClass = 'all';
+let currentAttPageSize = 20; // 20 | 50 | 'all'
+let currentAttPage = 1;
+let isAttExpanded = false;
+
+function updateQRCardContext(shouldRegenerate = false) {
+  const titleEl = document.getElementById('qr-course-title');
+  const metaEl = document.getElementById('qr-course-meta');
+  const dateBadgeEl = document.getElementById('qr-course-date-badge');
+
+  let matchedSchedule = null;
+  if (typeof schedulesData !== 'undefined') {
+    matchedSchedule = schedulesData.find(s =>
+      s.course === currentAttCourse && s.dateStr === currentAttendanceDateIso && s.type !== 'canceled'
+    ) || schedulesData.find(s =>
+      s.course === currentAttCourse && (s.type === 'regular_class' || s.type === 'makeup_class')
+    );
+  }
+
+  if (titleEl) {
+    titleEl.innerText = currentAttCourse || 'Điểm danh lớp học';
+  }
+  if (metaEl) {
+    if (matchedSchedule) {
+      metaEl.innerText = `Phòng ${matchedSchedule.room} • GV: ${matchedSchedule.teacher}`;
+    } else {
+      metaEl.innerText = 'Chưa có thông tin phòng / giảng viên';
+    }
+  }
+  if (dateBadgeEl) {
+    const formattedDate = currentAttendanceDateIso
+      ? formatVNStandardDate(currentAttendanceDateIso).replace(/-/g, '/')
+      : '25/11/2026';
+    dateBadgeEl.innerHTML = `<i class="bi bi-calendar-event me-1"></i>Ngày ${formattedDate}`;
+  }
+
+  if (shouldRegenerate && typeof window.regenerateAttendanceQR === 'function') {
+    window.regenerateAttendanceQR();
+  }
+}
+
+window.openAttendanceForCourse = function(courseName, dateIso = '') {
+  if (courseName) {
+    currentAttCourse = courseName;
+  }
+  if (dateIso) {
+    currentAttendanceDateIso = dateIso;
+  }
+  const attNav = document.querySelector('.nav-link-custom[data-target="section-attendance"]');
+  if (attNav) attNav.click();
+  refreshAttendanceCourseOptions();
+  renderAttendanceTable();
+  updateQRCardContext(true);
+};
+
+function refreshAttendanceCourseOptions() {
+  const courseSelect = document.getElementById('attCourseSelect');
+  if (!courseSelect || typeof schedulesData === 'undefined') return;
+
+  const courses = [...new Set(
+    schedulesData
+      .filter(s => s.type === 'regular_class' || s.type === 'makeup_class')
+      .map(s => s.course)
+  )];
+
+  if (!courses.includes(currentAttCourse) && courses.length > 0) {
+    currentAttCourse = courses[0];
+  }
+
+  courseSelect.innerHTML = courses.map(c => `<option value="${c}" ${c === currentAttCourse ? 'selected' : ''}>${c}</option>`).join('');
+}
+
+function initAttendanceManager() {
+  const modeBtns = document.querySelectorAll('#attendanceModeNav .nav-btn');
+  const dailyToolbar = document.getElementById('attendanceDailyToolbar');
+  const courseSelect = document.getElementById('attCourseSelect');
+  const searchInput = document.getElementById('attSearchInput');
+  const classFilter = document.getElementById('attClassFilter');
+  const pageSizeSelect = document.getElementById('attPageSizeSelect');
+  const btnExpand = document.getElementById('btnToggleExpandAttendance');
+  const qrCol = document.getElementById('attQrColumn');
+  const tableCol = document.getElementById('attTableColumn');
+  const scrollWrapper = document.querySelector('.att-table-scroll-wrapper');
+
+  if (!document.getElementById('attendanceTable')) return;
+
+  refreshAttendanceCourseOptions();
+  if (courseSelect) {
+    courseSelect.addEventListener('change', () => {
+      currentAttCourse = courseSelect.value;
+      currentAttPage = 1;
+      renderAttendanceTable();
+      updateQRCardContext(true);
+    });
+  }
+
+  // Populate Class Filter dropdown
+  if (classFilter) {
+    const uniqueClasses = [...new Set(attendanceStudents.map(s => s.className))].sort();
+    classFilter.innerHTML = '<option value="all">Tất cả lớp</option>' +
+      uniqueClasses.map(c => `<option value="${c}">${c}</option>`).join('');
+
+    classFilter.addEventListener('change', () => {
+      currentAttClass = classFilter.value;
+      currentAttPage = 1;
+      renderAttendanceTable();
+    });
+  }
+
+  // Realtime Search by Họ tên or Mã sinh viên
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      currentAttSearch = searchInput.value.trim().toLowerCase();
+      currentAttPage = 1;
+      renderAttendanceTable();
+    });
+  }
+
+  // Page Size Selector (20 / 50 / all)
+  if (pageSizeSelect) {
+    pageSizeSelect.addEventListener('change', () => {
+      const val = pageSizeSelect.value;
+      currentAttPageSize = val === 'all' ? 'all' : parseInt(val, 10);
+      currentAttPage = 1;
+      renderAttendanceTable();
+    });
+  }
+
+  // Expand / Collapse Table Button (Hide/Show QR Column)
+  if (btnExpand && qrCol && tableCol) {
+    btnExpand.addEventListener('click', () => {
+      isAttExpanded = !isAttExpanded;
+      if (isAttExpanded) {
+        qrCol.classList.add('d-none');
+        tableCol.classList.remove('col-lg-8');
+        tableCol.classList.add('col-12');
+        if (scrollWrapper) scrollWrapper.classList.add('expanded');
+        btnExpand.innerHTML = '<i class="bi bi-fullscreen-exit me-1"></i> Thu gọn';
+      } else {
+        qrCol.classList.remove('d-none');
+        tableCol.classList.remove('col-12');
+        tableCol.classList.add('col-lg-8');
+        if (scrollWrapper) scrollWrapper.classList.remove('expanded');
+        btnExpand.innerHTML = '<i class="bi bi-arrows-fullscreen me-1"></i> Mở rộng bảng';
+      }
+    });
+  }
+
+  // Mode Switcher: Theo từng ngày | Bảng tổng hợp cuối cùng
+  modeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      modeBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentAttendanceMode = btn.getAttribute('data-att-mode');
+
+      if (dailyToolbar) {
+        if (currentAttendanceMode === 'daily') {
+          dailyToolbar.classList.remove('d-none');
+        } else {
+          dailyToolbar.classList.add('d-none');
+        }
+      }
+      renderAttendanceTable();
+    });
+  });
+
+  renderAttendanceTable();
+}
+
+function renderAttendanceTable(highlightMssv = null) {
+  const thead = document.getElementById('attendanceTableHead');
+  const tbody = document.getElementById('attendanceTableBody');
+  const statsBadge = document.getElementById('attendanceDailyStatsBadge');
+  const datePillsContainer = document.getElementById('attendanceDatePills');
+  const sessionStateNote = document.getElementById('attSessionStateNote');
+  const paginationInfo = document.getElementById('attPaginationInfo');
+  const paginationControls = document.getElementById('attPaginationControls');
+  if (!thead || !tbody) return;
+
+  // 1. Lấy danh sách các buổi học hợp lệ (đồng bộ từ Lịch học & Lịch thi)
+  const sessions = getValidAttendanceSessions(currentAttCourse);
+  const completedOrOngoingSessions = sessions.filter(sess => sess.status === 'past' || sess.status === 'ongoing');
+
+  // Đảm bảo ngày đang chọn nằm trong danh sách hợp lệ
+  if (!sessions.some(sess => sess.iso === currentAttendanceDateIso)) {
+    const fallback = completedOrOngoingSessions[completedOrOngoingSessions.length - 1] || sessions[0];
+    currentAttendanceDateIso = fallback ? fallback.iso : '';
+  }
+
+  const activeSession = sessions.find(sess => sess.iso === currentAttendanceDateIso) || null;
+
+  // Render Date Pills cho chế độ "Theo từng ngày"
+  if (datePillsContainer) {
+    if (sessions.length === 0) {
+      datePillsContainer.innerHTML = '<span class="small text-muted fst-italic">Chưa có buổi học hợp lệ nào.</span>';
+    } else {
+      datePillsContainer.innerHTML = sessions.map(sess => {
+        const isActive = sess.iso === currentAttendanceDateIso;
+        const isFuture = sess.status === 'future';
+        let tag = '';
+        if (sess.isMakeup) tag = ' (Bù)';
+        else if (sess.status === 'ongoing') tag = ' (Hôm nay)';
+        else if (isFuture) tag = ' (Chưa tới)';
+
+        return `
+          <button type="button" class="att-date-pill ${isFuture ? 'future' : ''} ${isActive ? 'active' : ''}" data-att-iso="${sess.iso}">
+            ${sess.label}${tag}
+          </button>
+        `;
+      }).join('');
+
+      datePillsContainer.querySelectorAll('.att-date-pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+          currentAttendanceDateIso = pill.getAttribute('data-att-iso');
+          renderAttendanceTable();
+          updateQRCardContext(true);
+        });
+      });
+    }
+  }
+
+  // Ghi chú trạng thái buổi đang chọn ở chế độ Theo từng ngày
+  if (sessionStateNote) {
+    if (!activeSession) {
+      sessionStateNote.innerHTML = '';
+    } else if (activeSession.status === 'future') {
+      sessionStateNote.innerHTML = '<span class="text-warning-emphasis"><i class="bi bi-lock-fill me-1"></i>Buổi học chưa diễn ra — Khóa điểm danh</span>';
+    } else if (activeSession.status === 'ongoing') {
+      sessionStateNote.innerHTML = '<span class="text-success"><i class="bi bi-broadcast me-1"></i>Đang diễn ra hôm nay — Bấm ô để sửa tay</span>';
+    } else {
+      sessionStateNote.innerHTML = '<span class="text-secondary"><i class="bi bi-clock-history me-1"></i>Buổi đã diễn ra — Bấm ô để sửa tay</span>';
+    }
+  }
+
+  const sessionsToShow = currentAttendanceMode === 'daily'
+    ? (activeSession ? [activeSession] : [])
+    : sessions;
+
+  // 2. Render Table Header (Sticky Header + Sticky Left Columns)
+  thead.innerHTML = `
+    <tr>
+      <th class="text-center att-col-stt">STT</th>
+      <th class="att-col-mssv">Mã sinh viên</th>
+      <th class="att-col-name">Họ và tên</th>
+      <th>Ngày sinh</th>
+      <th>Lớp</th>
+      ${sessionsToShow.map(sess => {
+        const badge = sess.isMakeup ? ' <span class="badge bg-info-subtle text-info" style="font-size:10px;">Bù</span>' : '';
+        const futureTag = sess.status === 'future' ? '<div class="text-muted fw-normal" style="font-size:10px;">Chưa tới</div>' : '';
+        return `<th class="text-center">${sess.label}${badge}${futureTag}</th>`;
+      }).join('')}
+      <th class="text-center text-nowrap">Số buổi học / Số buổi vắng</th>
+    </tr>
   `;
 
-  tableBody.insertBefore(row, tableBody.firstChild);
-  if (tableBody.children.length > 8) {
-    tableBody.removeChild(tableBody.lastChild);
+  // 3. Filter Students (Always keeping fixed STT sort order)
+  const filteredStudents = attendanceStudents
+    .filter(s => {
+      const matchClass = currentAttClass === 'all' || s.className === currentAttClass;
+      const matchSearch = !currentAttSearch ||
+        s.name.toLowerCase().includes(currentAttSearch) ||
+        s.mssv.toLowerCase().includes(currentAttSearch);
+      return matchClass && matchSearch;
+    })
+    .sort((a, b) => a.stt - b.stt);
+
+  const totalFiltered = filteredStudents.length;
+
+  // Thống kê sĩ số buổi đang chọn (nếu buổi tương lai thì chưa điểm danh)
+  if (statsBadge) {
+    if (!activeSession) {
+      statsBadge.innerText = 'Chưa có buổi học';
+    } else if (activeSession.status === 'future') {
+      statsBadge.innerText = `Ngày ${activeSession.label} • Chưa diễn ra (${totalFiltered} SV)`;
+    } else {
+      let dailyPresentCount = 0;
+      filteredStudents.forEach(s => {
+        if (getStudentAttendanceStatus(s, activeSession.iso)) dailyPresentCount++;
+      });
+      statsBadge.innerText = `Ngày ${activeSession.label} • Có mặt: ${dailyPresentCount} / ${totalFiltered}`;
+    }
   }
+
+  // 4. Pagination Slice
+  const pageSize = currentAttPageSize === 'all' ? Math.max(totalFiltered, 1) : currentAttPageSize;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+  if (currentAttPage > totalPages) currentAttPage = totalPages;
+
+  const startIdx = (currentAttPage - 1) * pageSize;
+  const endIdx = currentAttPageSize === 'all' ? totalFiltered : Math.min(startIdx + pageSize, totalFiltered);
+  const pagedStudents = filteredStudents.slice(startIdx, endIdx);
+
+  // 5. Render Rows
+  if (pagedStudents.length === 0) {
+    const colSpan = 6 + sessionsToShow.length;
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="${colSpan}" class="text-center py-5 text-muted">
+          <i class="bi bi-search fs-3 d-block mb-2"></i>
+          Không tìm thấy sinh viên nào phù hợp với bộ lọc hiện tại.
+        </td>
+      </tr>
+    `;
+  } else {
+    tbody.innerHTML = pagedStudents.map(s => {
+      // Chỉ tính tổng trên các buổi Đã diễn ra & Đang diễn ra (KHÔNG tính buổi hủy & tương lai)
+      let presentCount = 0;
+      let absentCount = 0;
+      completedOrOngoingSessions.forEach(sess => {
+        if (getStudentAttendanceStatus(s, sess.iso)) presentCount++;
+        else absentCount++;
+      });
+
+      const dayCellsHTML = sessionsToShow.map(sess => {
+        if (sess.status === 'future') {
+          return `
+            <td class="att-cell att-cell-future" title="Buổi học ngày ${sess.label} chưa diễn ra (tương lai)">
+              <span class="att-future-mark">—</span>
+            </td>
+          `;
+        }
+        const isPresent = Boolean(getStudentAttendanceStatus(s, sess.iso));
+        return `
+          <td class="att-cell" data-mssv="${s.mssv}" data-iso="${sess.iso}" title="Bấm để đổi trạng thái Có mặt / Vắng (${s.name} - ${sess.label})">
+            ${isPresent ? '' : '<span class="att-absent-mark">X</span>'}
+          </td>
+        `;
+      }).join('');
+
+      const rowFlashClass = highlightMssv === s.mssv ? 'att-row-flash' : '';
+
+      return `
+        <tr class="${rowFlashClass}">
+          <td class="text-center fw-bold text-secondary att-col-stt">${s.stt}</td>
+          <td class="att-col-mssv"><strong class="text-dark">${s.mssv}</strong></td>
+          <td class="fw-semibold text-dark text-nowrap att-col-name">${s.name}</td>
+          <td class="text-muted text-nowrap">${s.dob}</td>
+          <td><span class="badge bg-light text-dark border">${s.className}</span></td>
+          ${dayCellsHTML}
+          <td class="text-center fw-bold text-nowrap">
+            <span class="text-success">${presentCount}</span>
+            <span class="text-muted mx-1">/</span>
+            <span class="${absentCount > 0 ? 'text-danger' : 'text-secondary'}">${absentCount}</span>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  // 6. Render Pagination Info & Controls
+  if (paginationInfo) {
+    if (totalFiltered === 0) {
+      paginationInfo.innerText = 'Hiển thị 0 sinh viên';
+    } else {
+      paginationInfo.innerText = `Hiển thị ${startIdx + 1}–${endIdx} trên tổng số ${totalFiltered} sinh viên`;
+    }
+  }
+
+  if (paginationControls) {
+    if (currentAttPageSize === 'all' || totalPages <= 1) {
+      paginationControls.innerHTML = '';
+    } else {
+      let pagesHTML = `
+        <li class="page-item ${currentAttPage === 1 ? 'disabled' : ''}">
+          <button type="button" class="page-link" data-page="${currentAttPage - 1}">Trang trước</button>
+        </li>
+      `;
+
+      for (let p = 1; p <= totalPages; p++) {
+        pagesHTML += `
+          <li class="page-item ${p === currentAttPage ? 'active' : ''}">
+            <button type="button" class="page-link" data-page="${p}">${p}</button>
+          </li>
+        `;
+      }
+
+      pagesHTML += `
+        <li class="page-item ${currentAttPage === totalPages ? 'disabled' : ''}">
+          <button type="button" class="page-link" data-page="${currentAttPage + 1}">Trang sau</button>
+        </li>
+      `;
+
+      paginationControls.innerHTML = pagesHTML;
+
+      paginationControls.querySelectorAll('.page-link').forEach(link => {
+        link.addEventListener('click', () => {
+          const targetPage = parseInt(link.getAttribute('data-page'), 10);
+          if (!isNaN(targetPage) && targetPage >= 1 && targetPage <= totalPages && targetPage !== currentAttPage) {
+            currentAttPage = targetPage;
+            renderAttendanceTable();
+          }
+        });
+      });
+    }
+  }
+
+  // Đồng bộ thẻ QR bên trái với môn & ngày đang chọn
+  updateQRCardContext(false);
+
+  // 7. Click-to-toggle Attendance Status ONLY on past / ongoing cells
+  tbody.querySelectorAll('.att-cell[data-iso]').forEach(cell => {
+    cell.addEventListener('click', () => {
+      const mssv = cell.getAttribute('data-mssv');
+      const isoDate = cell.getAttribute('data-iso');
+      const student = attendanceStudents.find(st => st.mssv === mssv);
+      if (!student || !isoDate) return;
+
+      const curVal = getStudentAttendanceStatus(student, isoDate);
+      student.records[isoDate] = !curVal;
+      renderAttendanceTable(mssv);
+    });
+  });
 }
 
 // =========================================================================
@@ -479,12 +1030,17 @@ function getSchedulesForDate(dateObj) {
   const dayKey = getDayKeyFromDate(dateObj);
   const targetTime = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate()).getTime();
 
-  return schedulesData.filter(s => {
-    if (s.dateStr && s.dateStr === iso) {
-      return true;
+  const results = [];
+
+  schedulesData.forEach(s => {
+    if (s.type !== 'regular_class' && s.dateStr && s.dateStr === iso) {
+      results.push(s);
+      return;
     }
+
     const isRegular = s.type === 'regular_class' || (s.type === 'canceled' && s.originalType === 'regular_class');
     if (isRegular && s.dayKey === dayKey) {
+      let inRange = true;
       if (s.dateRange) {
         const delimiter = s.dateRange.includes('đến') ? 'đến' : ' - ';
         const rangeParts = s.dateRange.split(delimiter).map(p => p.trim());
@@ -492,14 +1048,27 @@ function getSchedulesForDate(dateObj) {
           const startD = parseVNDateToObj(rangeParts[0]);
           const endD = parseVNDateToObj(rangeParts[1]);
           if (startD && endD) {
-            return targetTime >= startD.getTime() && targetTime <= endD.getTime();
+            inRange = targetTime >= startD.getTime() && targetTime <= endD.getTime();
           }
         }
       }
-      return true;
+      if (inRange) {
+        if (s.type === 'regular_class' && Array.isArray(s.canceledDates) && s.canceledDates.includes(iso)) {
+          results.push({
+            ...s,
+            type: 'canceled',
+            originalType: 'regular_class',
+            canceledDateIso: iso,
+            canceledReason: (s.canceledReasons && s.canceledReasons[iso]) || 'Buổi học đã được thông báo hủy / tạm nghỉ.'
+          });
+        } else {
+          results.push(s);
+        }
+      }
     }
-    return false;
   });
+
+  return results;
 }
 
 // Period calculation helper
@@ -724,7 +1293,7 @@ function renderScheduleCardHTML(s) {
               <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Thông báo khẩn</span>
             </div>
             <div class="d-flex align-items-center gap-2">
-              <button class="btn btn-sm btn-schedule-restore px-2 py-1" title="Khôi phục lại lịch này" onclick="restoreSchedule('${s.id}')"><i class="bi bi-arrow-counterclockwise me-1"></i>Khôi phục</button>
+              <button class="btn btn-sm btn-schedule-restore px-2 py-1" title="Khôi phục lại lịch này" onclick="restoreSchedule('${s.id}', '${s.canceledDateIso || ''}')"><i class="bi bi-arrow-counterclockwise me-1"></i>Khôi phục</button>
               <span class="vr text-muted opacity-25"></span>
               <button class="btn btn-sm btn-light text-danger p-1 px-2" title="Xóa vĩnh viễn" onclick="deleteSchedule('${s.id}')"><i class="bi bi-trash"></i></button>
             </div>
@@ -749,14 +1318,20 @@ function renderScheduleCardHTML(s) {
     `;
   }
 
-  // Regular Class
+  // Regular Class or Makeup Class
+  const isMakeup = s.type === 'makeup_class';
+  const badgeHTML = isMakeup
+    ? '<span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1 fw-bold"><i class="bi bi-arrow-repeat me-1"></i>Lịch học bù</span>'
+    : '<span class="badge-schedule-class"><i class="bi bi-circle-fill"></i> Lịch học</span>';
+  const safeCourse = (s.course || '').replace(/'/g, "\\'");
+
   return `
     <div class="schedule-item-card type-class">
       <div class="schedule-card-inner">
         <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-2">
-          <span class="badge-schedule-class"><i class="bi bi-circle-fill"></i> Lịch học</span>
+          ${badgeHTML}
           <div class="d-flex align-items-center gap-2">
-            <button class="btn btn-sm btn-light text-primary p-1 px-2" title="Điểm danh QR" onclick="document.querySelector('[data-target=\\'section-attendance\\']').click()"><i class="bi bi-qr-code-scan me-1"></i> Điểm danh</button>
+            <button class="btn btn-sm btn-light text-primary p-1 px-2" title="Điểm danh QR" onclick="openAttendanceForCourse('${safeCourse}', '${toISODate(currentSelectedDate)}')"><i class="bi bi-qr-code-scan me-1"></i> Điểm danh</button>
             <button class="btn btn-sm btn-schedule-cancel px-2 py-1" title="Báo hủy lịch (Tạm nghỉ)" onclick="cancelSchedule('${s.id}')"><i class="bi bi-calendar-x me-1"></i>Hủy lịch</button>
             <button class="btn btn-sm btn-light text-secondary p-1 px-2" title="Chỉnh sửa" onclick="editSchedule('${s.id}')"><i class="bi bi-pencil"></i></button>
             <span class="vr text-muted opacity-25"></span>
@@ -880,10 +1455,16 @@ window.cancelSchedule = function (id) {
   const item = schedulesData.find(s => s.id === id);
   if (!item) return;
 
+  const activeIso = toISODate(currentSelectedDate);
+  const activeDateFormatted = formatShortDayMonth(activeIso);
+  const isRegular = item.type === 'regular_class';
+
   const swalWithBootstrapButtons = getSwalBootstrap();
   swalWithBootstrapButtons.fire({
     title: "Xác nhận hủy lịch?",
-    text: `Lịch "${item.course}" (${item.room}) sẽ chuyển sang trạng thái Đã hủy (gạch đỏ)!`,
+    text: isRegular
+      ? `Buổi học "${item.course}" ngày ${activeDateFormatted} (${item.room}) sẽ bị hủy và tự động loại khỏi bảng điểm danh!`
+      : `Lịch "${item.course}" (${item.room}) sẽ chuyển sang trạng thái Đã hủy (gạch đỏ)!`,
     icon: "warning",
     input: "text",
     inputLabel: "Lý do hủy lịch (không bắt buộc)",
@@ -894,17 +1475,33 @@ window.cancelSchedule = function (id) {
     reverseButtons: true
   }).then((result) => {
     if (result.isConfirmed) {
-      item.originalType = item.type;
-      item.type = 'canceled';
-      item.status = 'Tạm nghỉ (Đã hủy)';
-      item.canceledReason = (result.value && result.value.trim())
+      const reason = (result.value && result.value.trim())
         ? result.value.trim()
         : 'Lịch đã được ban quản trị thông báo tạm nghỉ / hủy.';
+
+      if (isRegular) {
+        if (!Array.isArray(item.canceledDates)) item.canceledDates = [];
+        if (!item.canceledReasons) item.canceledReasons = {};
+        if (!item.canceledDates.includes(activeIso)) {
+          item.canceledDates.push(activeIso);
+        }
+        item.canceledReasons[activeIso] = reason;
+      } else {
+        item.originalType = item.type;
+        item.type = 'canceled';
+        item.status = 'Tạm nghỉ (Đã hủy)';
+        item.canceledReason = reason;
+      }
+
       renderScheduleUI();
+      refreshAttendanceCourseOptions();
+      renderAttendanceTable();
 
       swalWithBootstrapButtons.fire({
         title: "Đã hủy lịch!",
-        text: `Lịch "${item.course}" đã chuyển sang trạng thái bị hủy.`,
+        text: isRegular
+          ? `Buổi học ngày ${activeDateFormatted} đã bị hủy và tự động gỡ khỏi bảng điểm danh.`
+          : `Lịch "${item.course}" đã chuyển sang trạng thái bị hủy.`,
         icon: "success"
       });
     } else if (result.dismiss === Swal.DismissReason.cancel) {
@@ -918,7 +1515,7 @@ window.cancelSchedule = function (id) {
 };
 
 // Global restore schedule function (Khôi phục lịch đã hủy)
-window.restoreSchedule = function (id) {
+window.restoreSchedule = function (id, canceledDateIso = '') {
   const item = schedulesData.find(s => s.id === id);
   if (!item) return;
 
@@ -933,14 +1530,22 @@ window.restoreSchedule = function (id) {
     reverseButtons: true
   }).then((result) => {
     if (result.isConfirmed) {
-      item.type = item.originalType || 'regular_class';
-      item.status = item.type === 'exam' ? 'Sắp thi' : 'Sắp diễn ra';
-      delete item.canceledReason;
+      if (canceledDateIso && Array.isArray(item.canceledDates)) {
+        item.canceledDates = item.canceledDates.filter(d => d !== canceledDateIso);
+        if (item.canceledReasons) delete item.canceledReasons[canceledDateIso];
+      } else {
+        item.type = item.originalType || 'regular_class';
+        item.status = item.type === 'exam' ? 'Sắp thi' : 'Sắp diễn ra';
+        delete item.canceledReason;
+      }
+
       renderScheduleUI();
+      refreshAttendanceCourseOptions();
+      renderAttendanceTable();
 
       swalWithBootstrapButtons.fire({
         title: "Đã khôi phục!",
-        text: `Lịch "${item.course}" đã hoạt động trở lại.`,
+        text: `Lịch "${item.course}" đã hoạt động trở lại và đồng bộ với bảng điểm danh.`,
         icon: "success"
       });
     } else if (result.dismiss === Swal.DismissReason.cancel) {
@@ -985,6 +1590,8 @@ window.deleteSchedule = function (id) {
     if (result.isConfirmed) {
       schedulesData = schedulesData.filter(s => s.id !== id);
       renderScheduleUI();
+      refreshAttendanceCourseOptions();
+      renderAttendanceTable();
 
       swalWithBootstrapButtons.fire({
         title: "Đã xóa!",
@@ -1140,6 +1747,10 @@ function initAddScheduleModal() {
   const regularEndDate = document.getElementById('modalRegularEndDate');
 
   const specificDate = document.getElementById('modalSpecificDate');
+  const labelSpecificDate = document.getElementById('labelSpecificDate');
+  const groupExamTime = document.getElementById('groupExamTime');
+  const groupMakeupTime = document.getElementById('groupMakeupTime');
+  const makeupShiftSelect = document.getElementById('modalMakeupShift');
   const hourInput = document.getElementById('examHourInput');
   const minuteInput = document.getElementById('examMinuteInput');
   const previewBadge = document.getElementById('examTimeBadgePreview');
@@ -1237,8 +1848,9 @@ function initAddScheduleModal() {
     if (regularStartDate) regularStartDate.value = '';
     if (regularEndDate) regularEndDate.value = '';
 
-    // F. Reset Thời gian lịch thi
+    // F. Reset Thời gian lịch thi & học bù
     if (specificDate) specificDate.value = '';
+    if (makeupShiftSelect) makeupShiftSelect.value = '';
     if (hourInput) hourInput.value = '';
     if (minuteInput) minuteInput.value = '';
     if (previewBadge) previewBadge.innerText = '--h--';
@@ -1271,6 +1883,9 @@ function initAddScheduleModal() {
         examOnlyFields.forEach(el => el.classList.remove('d-none'));
         timeGroupRegular.classList.add('d-none');
         timeGroupSpecific.classList.remove('d-none');
+        if (groupExamTime) groupExamTime.classList.remove('d-none');
+        if (groupMakeupTime) groupMakeupTime.classList.add('d-none');
+        if (labelSpecificDate) labelSpecificDate.innerHTML = 'Ngày diễn ra thi <span class="text-danger">*</span>';
 
         // Cập nhật nhãn placeholder cho teacherSelect nếu đã chọn khoa
         if (deptSelect.value) {
@@ -1278,6 +1893,23 @@ function initAddScheduleModal() {
           const teachers = MOCK_DATA.teachers[deptId] || [];
           const curVal = teacherSelect.value;
           teacherSelect.innerHTML = '<option value="" selected disabled>-- Chọn Cán bộ coi thi --</option>' +
+            teachers.map(t => `<option value="${t}">${t}</option>`).join('');
+          if (curVal) teacherSelect.value = curVal;
+        }
+      } else if (currentScheduleType === 'makeup_class') {
+        teacherLabel.innerHTML = 'Giảng viên dạy bù <span class="text-danger">*</span>';
+        examOnlyFields.forEach(el => el.classList.add('d-none'));
+        timeGroupRegular.classList.add('d-none');
+        timeGroupSpecific.classList.remove('d-none');
+        if (groupExamTime) groupExamTime.classList.add('d-none');
+        if (groupMakeupTime) groupMakeupTime.classList.remove('d-none');
+        if (labelSpecificDate) labelSpecificDate.innerHTML = 'Ngày học bù <span class="text-danger">*</span>';
+
+        if (deptSelect.value) {
+          const deptId = deptSelect.value;
+          const teachers = MOCK_DATA.teachers[deptId] || [];
+          const curVal = teacherSelect.value;
+          teacherSelect.innerHTML = '<option value="" selected disabled>-- Chọn Giảng viên --</option>' +
             teachers.map(t => `<option value="${t}">${t}</option>`).join('');
           if (curVal) teacherSelect.value = curVal;
         }
@@ -1448,6 +2080,13 @@ function initAddScheduleModal() {
     triggerConflictCheck();
   });
 
+  if (makeupShiftSelect) {
+    makeupShiftSelect.addEventListener('change', () => {
+      clearFieldError(makeupShiftSelect, 'errorMakeupShift');
+      triggerConflictCheck();
+    });
+  }
+
   function getFormattedExamTime() {
     if (!hourInput || !minuteInput) return '';
     let h = hourInput.value.replace(/\D/g, '');
@@ -1528,6 +2167,12 @@ function initAddScheduleModal() {
         return;
       }
       targetDayKey = convertDayNameToKey(regularDaySelect.value);
+    } else if (currentScheduleType === 'makeup_class') {
+      if (!specificDate.value || !makeupShiftSelect || !makeupShiftSelect.value) {
+        alertBox.classList.add('d-none');
+        return;
+      }
+      targetDayKey = convertDateToDayKey(specificDate.value);
     } else {
       // Với lịch thi: cần chọn Ngày thi và nhập đủ Giờ thi
       if (!specificDate.value || !hourInput.value || !minuteInput.value) {
@@ -1630,6 +2275,13 @@ function initAddScheduleModal() {
         } else if (regularStartDate.value && regularEndDate.value < regularStartDate.value) {
           invalidEls.push(setFieldError(regularEndDate, 'errorRegularEnd', 'Ngày kết thúc phải sau hoặc bằng ngày bắt đầu'));
         }
+      } else if (currentScheduleType === 'makeup_class') {
+        if (!specificDate.value) {
+          invalidEls.push(setFieldError(specificDate, 'errorSpecificDate', 'Vui lòng chọn Ngày học bù'));
+        }
+        if (makeupShiftSelect && !makeupShiftSelect.value) {
+          invalidEls.push(setFieldError(makeupShiftSelect, 'errorMakeupShift', 'Vui lòng chọn Ca học bù'));
+        }
       } else if (currentScheduleType === 'exam') {
         if (!specificDate.value) {
           invalidEls.push(setFieldError(specificDate, 'errorSpecificDate', 'Vui lòng chọn Ngày diễn ra thi'));
@@ -1668,6 +2320,13 @@ function initAddScheduleModal() {
         const startFormatted = formatVNStandardDate(regularStartDate.value);
         const endFormatted = formatVNStandardDate(regularEndDate.value);
         targetDateRange = (startFormatted && endFormatted) ? `${startFormatted} đến ${endFormatted}` : '';
+      } else if (currentScheduleType === 'makeup_class') {
+        targetDateStr = specificDate.value;
+        targetDayKey = convertDateToDayKey(targetDateStr);
+        targetDayLabel = convertDayKeyToLabel(targetDayKey);
+        const shiftParts = (makeupShiftSelect && makeupShiftSelect.value) ? makeupShiftSelect.value.split('|') : ['1 - 4', '07:30 - 11:30'];
+        targetPeriods = shiftParts[0];
+        targetTimeRange = shiftParts[1];
       } else {
         targetDateStr = specificDate.value;
         targetDayKey = convertDateToDayKey(targetDateStr);
@@ -1713,8 +2372,10 @@ function initAddScheduleModal() {
         syncDateState(d);
       }
 
-      // Render lại giao diện
+      // Render lại giao diện Lịch học & đồng bộ ngay Bảng Điểm Danh
       renderScheduleUI();
+      refreshAttendanceCourseOptions();
+      renderAttendanceTable();
 
       // Đóng modal
       const bsModal = bootstrap.Modal.getInstance(modalEl);
@@ -1723,7 +2384,7 @@ function initAddScheduleModal() {
       }
 
       // Thông báo thành công bằng SweetAlert2
-      const typeLabel = currentScheduleType === 'exam' ? 'Lịch thi' : 'Lịch học';
+      const typeLabel = currentScheduleType === 'exam' ? 'Lịch thi' : (currentScheduleType === 'makeup_class' ? 'Lịch học bù' : 'Lịch học');
       getSwalBootstrap().fire({
         title: `Đã thêm ${typeLabel}!`,
         text: `${newSchedule.course} (${newSchedule.room}) đã được thêm thành công.`,
