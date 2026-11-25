@@ -1132,6 +1132,29 @@ body {
   background-color: #f8fafc;
 }
 
+/* Bố cục hàng Giảng viên (7fr) & Lớp học phần (5fr) và 2 Giám thị (1fr 1fr) */
+.teacher-class-grid {
+  display: grid;
+  grid-template-columns: 7fr 5fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.teacher-class-grid.exam-mode {
+  grid-template-columns: 1fr 1fr;
+}
+
+.teacher-class-grid.exam-mode .class-section-col {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 767px) {
+  .teacher-class-grid,
+  .teacher-class-grid.exam-mode {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Mobile responsive */
 @media (max-width: 991px) {
   .sidebar {

@@ -398,7 +398,8 @@ function updateQRCardContext(shouldRegenerate = false) {
   }
   if (metaEl) {
     if (matchedSchedule) {
-      metaEl.innerText = `Phòng ${matchedSchedule.room} • GV: ${matchedSchedule.teacher}`;
+      const classText = matchedSchedule.classSection ? ` • Lớp ${matchedSchedule.classSection}` : '';
+      metaEl.innerText = `Phòng ${matchedSchedule.room}${classText} • GV: ${matchedSchedule.teacher}`;
     } else {
       metaEl.innerText = 'Chưa có thông tin phòng / giảng viên';
     }
@@ -863,6 +864,11 @@ const MOCK_DATA = {
     'Cấu trúc dữ liệu & Giải thuật': 'TS. Nguyễn Văn E',
     'Hệ quản trị cơ sở dữ liệu': 'TS. Nguyễn Văn B'
   },
+  classSections: {
+    cntt: ['CNTT-11', 'CNTT-12', 'CNTT-13', 'KTPM-01', 'KTPM-02'],
+    kt: ['KT-01', 'KT-02', 'QTKD-05'],
+    nn: ['TA-04', 'TA-05', 'NNA-02']
+  },
   buildings: [
     { id: 'toa_a', name: 'Tòa Khu A' },
     { id: 'toa_b', name: 'Tòa Khu B' },
@@ -899,6 +905,7 @@ let schedulesData = [
     id: 'SCH_001',
     type: 'regular_class',
     course: 'Thực hành lập trình di động',
+    classSection: 'CNTT-11',
     dept: 'Khoa Công Nghệ Thông Tin',
     teacher: 'Nguyễn Văn A',
     room: 'D207', building: 'Tòa Khu D',
@@ -914,6 +921,7 @@ let schedulesData = [
     id: 'SCH_002',
     type: 'regular_class',
     course: 'Lập trình Java nâng cao (Spring Boot)',
+    classSection: 'CNTT-12',
     dept: 'Khoa Công Nghệ Thông Tin',
     teacher: 'TS. Nguyễn Văn B',
     room: 'A205', building: 'Tòa Khu A',
@@ -929,6 +937,7 @@ let schedulesData = [
     id: 'SCH_003',
     type: 'regular_class',
     course: 'Kiến trúc & Thiết kế Phần mềm',
+    classSection: 'KTPM-01',
     dept: 'Khoa Công Nghệ Thông Tin',
     teacher: 'ThS. Nguyễn Văn C',
     room: 'B204', building: 'Tòa Khu B',
@@ -944,8 +953,10 @@ let schedulesData = [
     id: 'SCH_004',
     type: 'exam',
     course: 'Nhập môn lập trình',
+    classSection: 'CNTT-11',
     dept: 'Khoa Công Nghệ Thông Tin',
-    teacher: 'TS. Nguyễn Văn D (Giám thị)',
+    teacher: 'TS. Nguyễn Văn D',
+    teacher2: 'ThS. Nguyễn Văn C',
     room: 'A404', building: 'Tòa Khu A',
     dayKey: 'th5',
     dayLabel: 'Thứ 5',
@@ -961,6 +972,7 @@ let schedulesData = [
     id: 'SCH_005',
     type: 'canceled',
     course: 'Triết học Mác-Lênin',
+    classSection: 'CT-01',
     dept: 'Khoa Lý Luận Chính Trị',
     teacher: 'TS. Nguyễn Văn E',
     room: 'C102', building: 'Tòa Khu C',
@@ -1071,26 +1083,67 @@ function getSchedulesForDate(dateObj) {
   return results;
 }
 
+// Bảng thời gian tiết học chuẩn HITU (1-5 Sáng, 6-10 Chiều, 11-15 Tối)
+const PERIOD_TIME_TABLE = {
+  1:  { start: '07:30', end: '08:15', session: 'morning' },
+  2:  { start: '08:15', end: '09:00', session: 'morning' },
+  3:  { start: '09:00', end: '09:45', session: 'morning' },
+  4:  { start: '10:00', end: '10:45', session: 'morning' },
+  5:  { start: '10:45', end: '11:30', session: 'morning' },
+  6:  { start: '12:30', end: '13:15', session: 'afternoon' },
+  7:  { start: '13:15', end: '14:00', session: 'afternoon' },
+  8:  { start: '14:15', end: '15:00', session: 'afternoon' },
+  9:  { start: '15:00', end: '15:45', session: 'afternoon' },
+  10: { start: '15:45', end: '16:30', session: 'afternoon' },
+  11: { start: '17:00', end: '17:45', session: 'evening' },
+  12: { start: '17:45', end: '18:30', session: 'evening' },
+  13: { start: '18:30', end: '19:15', session: 'evening' },
+  14: { start: '19:15', end: '20:00', session: 'evening' },
+  15: { start: '20:00', end: '20:45', session: 'evening' }
+};
+
+function getSessionBoundsForPeriod(pNum) {
+  if (pNum >= 1 && pNum <= 5) return { key: 'morning', label: '☀️ Buổi Sáng (Tiết 1 - 5)', min: 1, max: 5 };
+  if (pNum >= 6 && pNum <= 10) return { key: 'afternoon', label: '🌤️ Buổi Chiều (Tiết 6 - 10)', min: 6, max: 10 };
+  return { key: 'evening', label: '🌙 Buổi Tối (Tiết 11 - 15)', min: 11, max: 15 };
+}
+
+function buildAllPeriodOptionsHTML(placeholderText) {
+  const groups = [
+    { label: '☀️ Buổi Sáng (Tiết 1 - 5)', min: 1, max: 5 },
+    { label: '🌤️ Buổi Chiều (Tiết 6 - 10)', min: 6, max: 10 },
+    { label: '🌙 Buổi Tối (Tiết 11 - 15)', min: 11, max: 15 }
+  ];
+  let html = `<option value="" selected disabled>${placeholderText}</option>`;
+  groups.forEach(g => {
+    html += `<optgroup label="${g.label}">`;
+    for (let p = g.min; p <= g.max; p++) {
+      const t = PERIOD_TIME_TABLE[p];
+      html += `<option value="${p}">Tiết ${p} (${t.start} - ${t.end})</option>`;
+    }
+    html += `</optgroup>`;
+  });
+  return html;
+}
+
+function buildToPeriodOptionsHTML(fromP, placeholderText = '-- Đến tiết --') {
+  const bounds = getSessionBoundsForPeriod(fromP);
+  let html = `<option value="" selected disabled>${placeholderText}</option>`;
+  html += `<optgroup label="${bounds.label}">`;
+  for (let p = fromP; p <= bounds.max; p++) {
+    const t = PERIOD_TIME_TABLE[p];
+    html += `<option value="${p}">Tiết ${p} (${t.start} - ${t.end})</option>`;
+  }
+  html += `</optgroup>`;
+  return html;
+}
+
 // Period calculation helper
 function calculatePeriodTime(fromP, toP) {
   const fromNum = parseInt(fromP, 10);
   const toNum = parseInt(toP, 10);
-
-  const startMap = {
-    1: '07:30', 2: '08:15', 3: '09:00',
-    4: '09:45', 5: '10:30', 6: '12:30',
-    7: '13:15', 8: '14:00', 9: '14:45',
-    10: '15:45', 11: '17:30', 12: '18:15', 13: '19:00'
-  };
-  const endMap = {
-    1: '08:15', 2: '09:00', 3: '09:30',
-    4: '10:30', 5: '11:15', 6: '13:15',
-    7: '14:00', 8: '14:30', 9: '15:30',
-    10: '16:30', 11: '18:15', 12: '19:00', 13: '19:45'
-  };
-
-  const start = startMap[fromNum] || '07:30';
-  const end = endMap[toNum] || '11:30';
+  const start = PERIOD_TIME_TABLE[fromNum] ? PERIOD_TIME_TABLE[fromNum].start : '07:30';
+  const end = PERIOD_TIME_TABLE[toNum] ? PERIOD_TIME_TABLE[toNum].end : '11:30';
   return `${start} - ${end}`;
 }
 
@@ -1271,10 +1324,12 @@ function renderScheduleCardHTML(s) {
               <div class="schedule-info-row"><span class="schedule-info-label">Giờ thi:</span><span class="schedule-info-val text-primary fw-bold">${s.timeRange}</span></div>
               <div class="schedule-info-row"><span class="schedule-info-label">Thời gian thi:</span><span class="schedule-info-val">${s.examDuration || '90 phút'}</span></div>
               <div class="schedule-info-row"><span class="schedule-info-label">Hình thức thi:</span><span class="schedule-info-val">${s.examFormat || 'Tự luận'}</span></div>
+              <div class="schedule-info-row"><span class="schedule-info-label">Lớp học phần:</span><span class="schedule-info-val"><span class="badge bg-primary-subtle text-primary border border-primary-subtle">${s.classSection || 'CNTT-11'}</span></span></div>
             </div>
             <div class="col-md-6">
               <div class="schedule-info-row"><span class="schedule-info-label">Phòng thi:</span><span class="schedule-info-val text-primary"><i class="bi bi-geo-alt-fill text-danger me-1"></i>${s.room}</span></div>
-              <div class="schedule-info-row"><span class="schedule-info-label">Cán bộ coi thi:</span><span class="schedule-info-val">${s.teacher}</span></div>
+              <div class="schedule-info-row"><span class="schedule-info-label">Giám thị 1:</span><span class="schedule-info-val">${s.teacher}</span></div>
+              <div class="schedule-info-row"><span class="schedule-info-label">Giám thị 2:</span><span class="schedule-info-val">${s.teacher2 || 'Chưa phân công'}</span></div>
               <div class="schedule-info-row"><span class="schedule-info-label">Nhóm / Sĩ số:</span><span class="schedule-info-val">${s.examGroup || 'Toàn bộ sinh viên'}</span></div>
             </div>
           </div>
@@ -1346,6 +1401,7 @@ function renderScheduleCardHTML(s) {
           <div class="col-md-6">
             <div class="schedule-info-row"><span class="schedule-info-label">Tiết:</span><span class="schedule-info-val">${s.periods}</span></div>
             <div class="schedule-info-row"><span class="schedule-info-label">Giờ:</span><span class="schedule-info-val">${s.timeRange}</span></div>
+            <div class="schedule-info-row"><span class="schedule-info-label">Lớp học phần:</span><span class="schedule-info-val"><span class="badge bg-light text-dark border">${s.classSection || 'CNTT-11'}</span></span></div>
           </div>
           <div class="col-md-6">
             <div class="schedule-info-row"><span class="schedule-info-label">Phòng:</span><span class="schedule-info-val text-primary"><i class="bi bi-geo-alt-fill text-danger me-1"></i>${s.room}</span></div>
@@ -1558,18 +1614,11 @@ window.restoreSchedule = function (id, canceledDateIso = '') {
   });
 };
 
-// Global edit schedule placeholder with SweetAlert2
+// Global edit schedule -> Opens modal pre-filled with existing schedule data
 window.editSchedule = function (id) {
-  const item = schedulesData.find(s => s.id === id);
-  if (!item) return;
-
-  const swalWithBootstrapButtons = getSwalBootstrap();
-  swalWithBootstrapButtons.fire({
-    title: "Chỉnh sửa lịch",
-    text: `Bạn đang chọn chỉnh sửa "${item.course}" (${item.room} • ${item.timeRange}). Tính năng cập nhật chi tiết sẽ mở ở phần tiếp theo!`,
-    icon: "info",
-    confirmButtonText: "Đã hiểu"
-  });
+  if (typeof window.openEditScheduleModal === 'function') {
+    window.openEditScheduleModal(id);
+  }
 };
 
 // Global delete function (Xóa vĩnh viễn)
@@ -1724,13 +1773,18 @@ function initScheduleViews() {
 
 function initAddScheduleModal() {
   const modalEl = document.getElementById('addScheduleModal');
+  const modalTitleEl = document.getElementById('addScheduleModalLabel');
   const form = document.getElementById('formAddSchedule');
   const typeSelector = document.getElementById('scheduleTypeSelector');
   const typeBtns = document.querySelectorAll('.schedule-type-btn');
   const deptSelect = document.getElementById('modalSelectDept');
   const courseSelect = document.getElementById('modalSelectCourse');
+  const teacherClassGrid = document.getElementById('teacherClassGrid');
   const teacherSelect = document.getElementById('modalSelectTeacher');
   const teacherLabel = document.getElementById('modalLabelTeacher');
+  const proctor2ColWrapper = document.getElementById('proctor2ColWrapper');
+  const teacher2Select = document.getElementById('modalSelectTeacher2');
+  const classSectionSelect = document.getElementById('modalSelectClassSection');
   const buildingSelect = document.getElementById('modalSelectBuilding');
   const roomSelect = document.getElementById('modalSelectRoom');
 
@@ -1761,6 +1815,8 @@ function initAddScheduleModal() {
   const submitBtn = document.getElementById('btnSubmitAddSchedule');
 
   let currentScheduleType = null; // Bắt đầu chưa chọn loại lịch nào
+  let editingScheduleId = null;
+  let isOpeningForEdit = false;
 
   if (!deptSelect || !courseSelect) return;
 
@@ -1788,8 +1844,142 @@ function initAddScheduleModal() {
     return inputEl;
   }
 
-  // 1. Reset Modal State về Trắng hoàn toàn
+  function applyScheduleTypeUI(type) {
+    currentScheduleType = type;
+    typeBtns.forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-type') === type);
+    });
+    clearFieldError(typeSelector, 'errorScheduleType');
+    if (timeGroupEmptyHint) timeGroupEmptyHint.classList.add('d-none');
+
+    if (type === 'exam') {
+      if (teacherClassGrid) teacherClassGrid.classList.add('exam-mode');
+      if (proctor2ColWrapper) proctor2ColWrapper.classList.remove('d-none');
+      teacherLabel.innerHTML = '<i class="bi bi-shield-check me-1 text-success"></i> Cán bộ coi thi / Giám thị 1 <span class="text-danger">*</span>';
+      examOnlyFields.forEach(el => el.classList.remove('d-none'));
+      timeGroupRegular.classList.add('d-none');
+      timeGroupSpecific.classList.remove('d-none');
+      if (groupExamTime) groupExamTime.classList.remove('d-none');
+      if (groupMakeupTime) groupMakeupTime.classList.add('d-none');
+      if (labelSpecificDate) labelSpecificDate.innerHTML = 'Ngày diễn ra thi <span class="text-danger">*</span>';
+    } else if (type === 'makeup_class') {
+      if (teacherClassGrid) teacherClassGrid.classList.remove('exam-mode');
+      if (proctor2ColWrapper) proctor2ColWrapper.classList.add('d-none');
+      clearFieldError(teacher2Select, 'errorTeacher2');
+      teacherLabel.innerHTML = 'Giảng viên dạy bù <span class="text-danger">*</span>';
+      examOnlyFields.forEach(el => el.classList.add('d-none'));
+      timeGroupRegular.classList.add('d-none');
+      timeGroupSpecific.classList.remove('d-none');
+      if (groupExamTime) groupExamTime.classList.add('d-none');
+      if (groupMakeupTime) groupMakeupTime.classList.remove('d-none');
+      if (labelSpecificDate) labelSpecificDate.innerHTML = 'Ngày học bù <span class="text-danger">*</span>';
+    } else {
+      if (teacherClassGrid) teacherClassGrid.classList.remove('exam-mode');
+      if (proctor2ColWrapper) proctor2ColWrapper.classList.add('d-none');
+      clearFieldError(teacher2Select, 'errorTeacher2');
+      teacherLabel.innerHTML = 'Giảng viên phụ trách <span class="text-danger">*</span>';
+      examOnlyFields.forEach(el => el.classList.add('d-none'));
+      timeGroupRegular.classList.remove('d-none');
+      timeGroupSpecific.classList.add('d-none');
+    }
+
+    // Cập nhật placeholder cho teacherSelect nếu đã chọn khoa mà chưa chọn người
+    if (deptSelect.value) {
+      const deptId = deptSelect.value;
+      const teachers = MOCK_DATA.teachers[deptId] || [];
+      const curVal1 = teacherSelect.value;
+      const t1Placeholder = type === 'exam' ? '-- Chọn Giám thị 1 --' : '-- Chọn Giảng viên --';
+      teacherSelect.innerHTML = `<option value="" ${!curVal1 ? 'selected' : ''} disabled>${t1Placeholder}</option>` +
+        teachers.map(t => `<option value="${t}" ${t === curVal1 ? 'selected' : ''}>${t}</option>`).join('');
+      if (curVal1) teacherSelect.value = curVal1;
+
+      if (teacher2Select) {
+        const curVal2 = teacher2Select.value;
+        teacher2Select.innerHTML = `<option value="" ${!curVal2 ? 'selected' : ''} disabled>-- Chọn Giám thị 2 --</option>` +
+          teachers.map(t => `<option value="${t}" ${t === curVal2 ? 'selected' : ''}>${t}</option>`).join('');
+        if (curVal2) teacher2Select.value = curVal2;
+      }
+    }
+  }
+
+  function populateDeptChildren(deptId, prefill = {}) {
+    if (!deptId) {
+      courseSelect.disabled = true;
+      courseSelect.innerHTML = '<option value="" selected disabled>-- Vui lòng chọn Khoa trước --</option>';
+      courseSelect.value = '';
+
+      teacherSelect.disabled = true;
+      teacherSelect.innerHTML = '<option value="" selected disabled>-- Vui lòng chọn Khoa trước --</option>';
+      teacherSelect.value = '';
+
+      if (teacher2Select) {
+        teacher2Select.disabled = true;
+        teacher2Select.innerHTML = '<option value="" selected disabled>-- Vui lòng chọn Khoa trước --</option>';
+        teacher2Select.value = '';
+      }
+
+      if (classSectionSelect) {
+        classSectionSelect.disabled = true;
+        classSectionSelect.innerHTML = '<option value="" selected disabled>-- Vui lòng chọn Khoa trước --</option>';
+        classSectionSelect.value = '';
+      }
+      return;
+    }
+
+    const courses = MOCK_DATA.courses[deptId] || [];
+    const teachers = MOCK_DATA.teachers[deptId] || [];
+    const sections = (MOCK_DATA.classSections && MOCK_DATA.classSections[deptId]) || ['CNTT-11', 'CNTT-12'];
+
+    courseSelect.disabled = false;
+    courseSelect.innerHTML = '<option value="" selected disabled>-- Chọn Môn học --</option>' +
+      courses.map(c => `<option value="${c}">${c}</option>`).join('');
+    courseSelect.value = prefill.course || '';
+    clearFieldError(courseSelect, 'errorCourse');
+
+    teacherSelect.disabled = false;
+    const t1Placeholder = currentScheduleType === 'exam' ? '-- Chọn Giám thị 1 --' : '-- Chọn Giảng viên --';
+    teacherSelect.innerHTML = `<option value="" selected disabled>${t1Placeholder}</option>` +
+      teachers.map(t => `<option value="${t}">${t}</option>`).join('');
+    teacherSelect.value = prefill.teacher || '';
+    clearFieldError(teacherSelect, 'errorTeacher');
+
+    if (teacher2Select) {
+      teacher2Select.disabled = false;
+      teacher2Select.innerHTML = '<option value="" selected disabled>-- Chọn Giám thị 2 --</option>' +
+        teachers.map(t => `<option value="${t}">${t}</option>`).join('');
+      teacher2Select.value = prefill.teacher2 || '';
+      clearFieldError(teacher2Select, 'errorTeacher2');
+    }
+
+    if (classSectionSelect) {
+      classSectionSelect.disabled = false;
+      classSectionSelect.innerHTML = '<option value="" selected disabled>-- Chọn Lớp học phần --</option>' +
+        sections.map(sec => `<option value="${sec}">${sec}</option>`).join('');
+      classSectionSelect.value = prefill.classSection || '';
+      clearFieldError(classSectionSelect, 'errorClassSection');
+    }
+  }
+
+  function populateBuildingRooms(buildingId, prefillRoom = '') {
+    if (!buildingId) {
+      roomSelect.disabled = true;
+      roomSelect.innerHTML = '<option value="" selected disabled>-- Vui lòng chọn Tòa nhà trước --</option>';
+      roomSelect.value = '';
+      return;
+    }
+    const rooms = MOCK_DATA.rooms[buildingId] || [];
+    roomSelect.disabled = false;
+    roomSelect.innerHTML = '<option value="" selected disabled>-- Chọn Phòng --</option>' +
+      rooms.map(r => `<option value="${r.name}">${r.name}</option>`).join('');
+    roomSelect.value = prefillRoom || '';
+    clearFieldError(roomSelect, 'errorRoom');
+  }
+
+  // 1. Reset Modal State về Trắng hoàn toàn (Thêm mới)
   function resetModalState() {
+    editingScheduleId = null;
+    if (modalTitleEl) modalTitleEl.innerText = 'Thêm Lịch Học / Lịch Thi';
+
     // A. Xóa toàn bộ trạng thái lỗi
     document.querySelectorAll('#formAddSchedule .is-invalid').forEach(el => el.classList.remove('is-invalid'));
     document.querySelectorAll('#formAddSchedule .field-error-msg').forEach(el => el.classList.add('d-none'));
@@ -1797,44 +1987,31 @@ function initAddScheduleModal() {
     // B. Reset Loại lịch: Không chọn sẵn nút nào
     currentScheduleType = null;
     typeBtns.forEach(b => b.classList.remove('active'));
+    if (teacherClassGrid) teacherClassGrid.classList.remove('exam-mode');
+    if (proctor2ColWrapper) proctor2ColWrapper.classList.add('d-none');
     if (timeGroupEmptyHint) timeGroupEmptyHint.classList.remove('d-none');
     if (timeGroupRegular) timeGroupRegular.classList.add('d-none');
     if (timeGroupSpecific) timeGroupSpecific.classList.add('d-none');
     examOnlyFields.forEach(el => el.classList.add('d-none'));
     if (teacherLabel) teacherLabel.innerHTML = 'Giảng viên phụ trách <span class="text-danger">*</span>';
 
-    // C. Reset Khoa, Môn học, Giảng viên (Disabled chờ chọn Khoa)
+    // C. Reset Khoa, Môn học, Giảng viên, Giám thị 2, Lớp học phần (Disabled chờ chọn Khoa)
     deptSelect.innerHTML = '<option value="" selected disabled>-- Chọn Khoa / Viện --</option>' +
       MOCK_DATA.departments.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
     deptSelect.value = '';
-
-    courseSelect.innerHTML = '<option value="" selected disabled>-- Vui lòng chọn Khoa trước --</option>';
-    courseSelect.value = '';
-    courseSelect.disabled = true;
-
-    teacherSelect.innerHTML = '<option value="" selected disabled>-- Vui lòng chọn Khoa trước --</option>';
-    teacherSelect.value = '';
-    teacherSelect.disabled = true;
+    populateDeptChildren('');
 
     // D. Reset Tòa nhà & Phòng (Disabled chờ chọn Tòa nhà)
     buildingSelect.innerHTML = '<option value="" selected disabled>-- Chọn Tòa nhà --</option>' +
       MOCK_DATA.buildings.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
     buildingSelect.value = '';
-
-    roomSelect.innerHTML = '<option value="" selected disabled>-- Vui lòng chọn Tòa nhà trước --</option>';
-    roomSelect.value = '';
-    roomSelect.disabled = true;
+    populateBuildingRooms('');
 
     // E. Reset Thời gian lịch học
-    if (regularDaySelect) {
-      regularDaySelect.value = '';
-    }
+    if (regularDaySelect) regularDaySelect.value = '';
 
     if (regularFromPeriod) {
-      regularFromPeriod.innerHTML = '<option value="" selected disabled>-- Từ tiết --</option>';
-      for (let p = 1; p <= 12; p++) {
-        regularFromPeriod.innerHTML += `<option value="${p}">Tiết ${p}</option>`;
-      }
+      regularFromPeriod.innerHTML = buildAllPeriodOptionsHTML('-- Từ tiết --');
       regularFromPeriod.value = '';
     }
 
@@ -1863,107 +2040,133 @@ function initAddScheduleModal() {
     }
   }
 
+  // Mở modal ở chế độ Chỉnh sửa & tự động đổ dữ liệu cũ
+  window.openEditScheduleModal = function(id) {
+    const item = schedulesData.find(s => s.id === id);
+    if (!item || !modalEl) return;
+
+    isOpeningForEdit = true;
+    resetModalState();
+    editingScheduleId = id;
+    if (modalTitleEl) modalTitleEl.innerText = 'Chỉnh Sửa Lịch Học / Lịch Thi';
+
+    const editType = item.type === 'canceled' ? (item.originalType || 'regular_class') : item.type;
+    applyScheduleTypeUI(editType);
+
+    // Tìm Khoa phù hợp theo tên khoa hoặc tên môn
+    let matchedDept = MOCK_DATA.departments.find(d => d.name === item.dept);
+    if (!matchedDept) {
+      matchedDept = MOCK_DATA.departments.find(d => (MOCK_DATA.courses[d.id] || []).includes(item.course)) || MOCK_DATA.departments[0];
+    }
+    const deptId = matchedDept ? matchedDept.id : 'cntt';
+    deptSelect.value = deptId;
+
+    // Đảm bảo giá trị hiện tại luôn có trong dropdown khi sửa
+    if (item.course && !(MOCK_DATA.courses[deptId] || []).includes(item.course)) {
+      MOCK_DATA.courses[deptId] = [item.course, ...(MOCK_DATA.courses[deptId] || [])];
+    }
+    if (item.teacher && !(MOCK_DATA.teachers[deptId] || []).includes(item.teacher)) {
+      MOCK_DATA.teachers[deptId] = [item.teacher, ...(MOCK_DATA.teachers[deptId] || [])];
+    }
+    if (item.teacher2 && !(MOCK_DATA.teachers[deptId] || []).includes(item.teacher2)) {
+      MOCK_DATA.teachers[deptId] = [item.teacher2, ...(MOCK_DATA.teachers[deptId] || [])];
+    }
+    if (item.classSection && !(MOCK_DATA.classSections[deptId] || []).includes(item.classSection)) {
+      MOCK_DATA.classSections[deptId] = [item.classSection, ...(MOCK_DATA.classSections[deptId] || [])];
+    }
+
+    populateDeptChildren(deptId, {
+      course: item.course,
+      teacher: item.teacher,
+      teacher2: item.teacher2 || '',
+      classSection: item.classSection || ''
+    });
+
+    // Tìm Tòa nhà & Phòng
+    const matchedBld = MOCK_DATA.buildings.find(b => b.name === item.building) || MOCK_DATA.buildings[0];
+    const bldId = matchedBld ? matchedBld.id : 'toa_a';
+    buildingSelect.value = bldId;
+    populateBuildingRooms(bldId, item.room);
+
+    // Đổ thời gian
+    if (editType === 'regular_class') {
+      if (regularDaySelect && item.dayLabel) regularDaySelect.value = item.dayLabel;
+      const pMatch = (item.periods || '').match(/(\d+)\s*-\s*(\d+)/);
+      if (pMatch) {
+        const fromP = parseInt(pMatch[1], 10);
+        const toP = parseInt(pMatch[2], 10);
+        regularFromPeriod.value = String(fromP);
+        regularToPeriod.disabled = false;
+        regularToPeriod.innerHTML = buildToPeriodOptionsHTML(fromP, '-- Đến tiết --');
+        regularToPeriod.value = String(toP);
+        regularTimeDisplay.value = calculatePeriodTime(fromP, toP);
+      }
+      if (item.dateRange) {
+        const delim = item.dateRange.includes('đến') ? 'đến' : ' - ';
+        const dParts = item.dateRange.split(delim).map(x => x.trim());
+        if (dParts.length === 2) {
+          const sObj = parseVNDateToObj(dParts[0]);
+          const eObj = parseVNDateToObj(dParts[1]);
+          if (sObj) regularStartDate.value = toISODate(sObj);
+          if (eObj) regularEndDate.value = toISODate(eObj);
+        }
+      }
+    } else if (editType === 'makeup_class') {
+      if (specificDate) specificDate.value = item.dateStr || '';
+      if (makeupShiftSelect) {
+        const shiftVal = `${item.periods}|${item.timeRange}`;
+        makeupShiftSelect.value = shiftVal;
+      }
+    } else if (editType === 'exam') {
+      if (specificDate) specificDate.value = item.dateStr || '';
+      const tMatch = (item.timeRange || '').match(/(\d{1,2})[hHg:](\d{1,2})/);
+      if (tMatch && hourInput && minuteInput) {
+        hourInput.value = tMatch[1].padStart(2, '0');
+        minuteInput.value = tMatch[2].padStart(2, '0');
+        previewBadge.innerText = `${hourInput.value}h${minuteInput.value}`;
+      }
+      const fmtEl = document.getElementById('modalExamFormat');
+      const durEl = document.getElementById('modalExamDuration');
+      const grpEl = document.getElementById('modalExamGroup');
+      if (fmtEl && item.examFormat) fmtEl.value = item.examFormat;
+      if (durEl && item.examDuration) durEl.value = item.examDuration;
+      if (grpEl && item.examGroup) grpEl.value = item.examGroup;
+    }
+
+    if (submitBtn) {
+      submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i> Lưu Thay Đổi';
+      submitBtn.className = 'btn btn-primary-custom px-4 fw-bold shadow-sm';
+    }
+
+    triggerConflictCheck();
+
+    const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    bsModal.show();
+  };
+
   // Lắng nghe sự kiện modal mở (Bootstrap show.bs.modal)
   if (modalEl) {
-    modalEl.addEventListener('show.bs.modal', resetModalState);
+    modalEl.addEventListener('show.bs.modal', () => {
+      if (isOpeningForEdit) {
+        isOpeningForEdit = false;
+        return;
+      }
+      resetModalState();
+    });
   }
 
   // 2. Chuyển đổi Loại lịch (Người dùng click chủ động)
   typeBtns.forEach(btn => {
     btn.addEventListener('click', () => {
-      typeBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentScheduleType = btn.getAttribute('data-type');
-      clearFieldError(typeSelector, 'errorScheduleType');
-
-      if (timeGroupEmptyHint) timeGroupEmptyHint.classList.add('d-none');
-
-      if (currentScheduleType === 'exam') {
-        teacherLabel.innerHTML = '<i class="bi bi-shield-check me-1 text-success"></i> Cán bộ coi thi / Giám thị <span class="text-danger">*</span>';
-        examOnlyFields.forEach(el => el.classList.remove('d-none'));
-        timeGroupRegular.classList.add('d-none');
-        timeGroupSpecific.classList.remove('d-none');
-        if (groupExamTime) groupExamTime.classList.remove('d-none');
-        if (groupMakeupTime) groupMakeupTime.classList.add('d-none');
-        if (labelSpecificDate) labelSpecificDate.innerHTML = 'Ngày diễn ra thi <span class="text-danger">*</span>';
-
-        // Cập nhật nhãn placeholder cho teacherSelect nếu đã chọn khoa
-        if (deptSelect.value) {
-          const deptId = deptSelect.value;
-          const teachers = MOCK_DATA.teachers[deptId] || [];
-          const curVal = teacherSelect.value;
-          teacherSelect.innerHTML = '<option value="" selected disabled>-- Chọn Cán bộ coi thi --</option>' +
-            teachers.map(t => `<option value="${t}">${t}</option>`).join('');
-          if (curVal) teacherSelect.value = curVal;
-        }
-      } else if (currentScheduleType === 'makeup_class') {
-        teacherLabel.innerHTML = 'Giảng viên dạy bù <span class="text-danger">*</span>';
-        examOnlyFields.forEach(el => el.classList.add('d-none'));
-        timeGroupRegular.classList.add('d-none');
-        timeGroupSpecific.classList.remove('d-none');
-        if (groupExamTime) groupExamTime.classList.add('d-none');
-        if (groupMakeupTime) groupMakeupTime.classList.remove('d-none');
-        if (labelSpecificDate) labelSpecificDate.innerHTML = 'Ngày học bù <span class="text-danger">*</span>';
-
-        if (deptSelect.value) {
-          const deptId = deptSelect.value;
-          const teachers = MOCK_DATA.teachers[deptId] || [];
-          const curVal = teacherSelect.value;
-          teacherSelect.innerHTML = '<option value="" selected disabled>-- Chọn Giảng viên --</option>' +
-            teachers.map(t => `<option value="${t}">${t}</option>`).join('');
-          if (curVal) teacherSelect.value = curVal;
-        }
-      } else {
-        teacherLabel.innerHTML = 'Giảng viên phụ trách <span class="text-danger">*</span>';
-        examOnlyFields.forEach(el => el.classList.add('d-none'));
-        timeGroupRegular.classList.remove('d-none');
-        timeGroupSpecific.classList.add('d-none');
-
-        if (deptSelect.value) {
-          const deptId = deptSelect.value;
-          const teachers = MOCK_DATA.teachers[deptId] || [];
-          const curVal = teacherSelect.value;
-          teacherSelect.innerHTML = '<option value="" selected disabled>-- Chọn Giảng viên --</option>' +
-            teachers.map(t => `<option value="${t}">${t}</option>`).join('');
-          if (curVal) teacherSelect.value = curVal;
-        }
-      }
-
+      applyScheduleTypeUI(btn.getAttribute('data-type'));
       triggerConflictCheck();
     });
   });
 
-  // 3. Thao tác tuần tự: Khoa -> Môn học & Giảng viên
+  // 3. Thao tác tuần tự: Khoa -> Môn học, Giảng viên, Giám thị 2 & Lớp học phần
   deptSelect.addEventListener('change', () => {
-    const deptId = deptSelect.value;
     clearFieldError(deptSelect, 'errorDept');
-
-    if (!deptId) {
-      courseSelect.disabled = true;
-      courseSelect.innerHTML = '<option value="" selected disabled>-- Vui lòng chọn Khoa trước --</option>';
-      courseSelect.value = '';
-
-      teacherSelect.disabled = true;
-      teacherSelect.innerHTML = '<option value="" selected disabled>-- Vui lòng chọn Khoa trước --</option>';
-      teacherSelect.value = '';
-    } else {
-      const courses = MOCK_DATA.courses[deptId] || [];
-      const teachers = MOCK_DATA.teachers[deptId] || [];
-
-      courseSelect.disabled = false;
-      courseSelect.innerHTML = '<option value="" selected disabled>-- Chọn Môn học --</option>' +
-        courses.map(c => `<option value="${c}">${c}</option>`).join('');
-      courseSelect.value = '';
-      clearFieldError(courseSelect, 'errorCourse');
-
-      teacherSelect.disabled = false;
-      const tPlaceholder = currentScheduleType === 'exam' ? '-- Chọn Cán bộ coi thi --' : '-- Chọn Giảng viên --';
-      teacherSelect.innerHTML = `<option value="" selected disabled>${tPlaceholder}</option>` +
-        teachers.map(t => `<option value="${t}">${t}</option>`).join('');
-      teacherSelect.value = '';
-      clearFieldError(teacherSelect, 'errorTeacher');
-    }
-
+    populateDeptChildren(deptSelect.value);
     triggerConflictCheck();
   });
 
@@ -1986,27 +2189,33 @@ function initAddScheduleModal() {
 
   teacherSelect.addEventListener('change', () => {
     clearFieldError(teacherSelect, 'errorTeacher');
+    if (currentScheduleType === 'exam' && teacher2Select && teacher2Select.value && teacherSelect.value !== teacher2Select.value) {
+      clearFieldError(teacher2Select, 'errorTeacher2');
+    }
     triggerConflictCheck();
   });
 
+  if (teacher2Select) {
+    teacher2Select.addEventListener('change', () => {
+      if (currentScheduleType === 'exam' && teacherSelect.value && teacher2Select.value === teacherSelect.value) {
+        setFieldError(teacher2Select, 'errorTeacher2', 'Giám thị 2 không được trùng với Giám thị 1');
+      } else {
+        clearFieldError(teacher2Select, 'errorTeacher2');
+      }
+      triggerConflictCheck();
+    });
+  }
+
+  if (classSectionSelect) {
+    classSectionSelect.addEventListener('change', () => {
+      clearFieldError(classSectionSelect, 'errorClassSection');
+    });
+  }
+
   // 4. Thao tác tuần tự: Tòa nhà -> Phòng
   buildingSelect.addEventListener('change', () => {
-    const buildingId = buildingSelect.value;
     clearFieldError(buildingSelect, 'errorBuilding');
-
-    if (!buildingId) {
-      roomSelect.disabled = true;
-      roomSelect.innerHTML = '<option value="" selected disabled>-- Vui lòng chọn Tòa nhà trước --</option>';
-      roomSelect.value = '';
-    } else {
-      const rooms = MOCK_DATA.rooms[buildingId] || [];
-      roomSelect.disabled = false;
-      roomSelect.innerHTML = '<option value="" selected disabled>-- Chọn Phòng --</option>' +
-        rooms.map(r => `<option value="${r.name}">${r.name}</option>`).join('');
-      roomSelect.value = '';
-      clearFieldError(roomSelect, 'errorRoom');
-    }
-
+    populateBuildingRooms(buildingSelect.value);
     triggerConflictCheck();
   });
 
@@ -2032,10 +2241,7 @@ function initAddScheduleModal() {
       regularTimeDisplay.value = '-- : --';
     } else {
       regularToPeriod.disabled = false;
-      regularToPeriod.innerHTML = '<option value="" selected disabled>-- Đến tiết --</option>';
-      for (let p = fromVal; p <= 12; p++) {
-        regularToPeriod.innerHTML += `<option value="${p}">Tiết ${p}</option>`;
-      }
+      regularToPeriod.innerHTML = buildToPeriodOptionsHTML(fromVal, '-- Đến tiết --');
       regularToPeriod.value = '';
       regularTimeDisplay.value = '-- : --';
       clearFieldError(regularToPeriod, 'errorRegularTo');
@@ -2074,7 +2280,7 @@ function initAddScheduleModal() {
     }
   });
 
-  // 6. Nhập giờ thi (Lịch thi)
+  // 6. Nhập giờ thi (Lịch thi) & Ca học bù
   specificDate.addEventListener('change', () => {
     clearFieldError(specificDate, 'errorSpecificDate');
     triggerConflictCheck();
@@ -2143,7 +2349,6 @@ function initAddScheduleModal() {
   function triggerConflictCheck() {
     if (!alertBox || !alertMsg || !alertIcon) return;
 
-    // Yêu cầu 4: Chỉ kiểm tra trùng lịch sau khi đã chọn đủ thông tin liên quan
     if (!currentScheduleType) {
       alertBox.classList.add('d-none');
       return;
@@ -2151,8 +2356,17 @@ function initAddScheduleModal() {
 
     const selectedRoom = roomSelect.value;
     const selectedTeacher = teacherSelect.value;
+    const selectedTeacher2 = (currentScheduleType === 'exam' && teacher2Select) ? teacher2Select.value : '';
 
-    // Phải có ít nhất phòng hoặc giảng viên
+    // Kiểm tra trùng 2 giám thị trong cùng ca thi
+    if (currentScheduleType === 'exam' && selectedTeacher && selectedTeacher2 && selectedTeacher === selectedTeacher2) {
+      alertBox.classList.remove('d-none');
+      alertBox.className = 'alert alert-warning d-flex align-items-center gap-2 py-2 px-3 mb-0 rounded-3 mt-3 border-warning-subtle';
+      alertIcon.className = 'bi bi-exclamation-triangle-fill text-warning fs-5';
+      alertMsg.innerHTML = `<strong>⚠️ LƯU Ý GIÁM THỊ:</strong> Giám thị 1 và Giám thị 2 đang chọn trùng cùng 1 người ([${selectedTeacher}]). Vui lòng chọn 2 giám thị khác nhau.`;
+      return;
+    }
+
     if (!selectedRoom && !selectedTeacher) {
       alertBox.classList.add('d-none');
       return;
@@ -2161,7 +2375,6 @@ function initAddScheduleModal() {
     let targetDayKey = null;
 
     if (currentScheduleType === 'regular_class') {
-      // Với lịch học: cần chọn đủ Thứ, Từ tiết, Đến tiết
       if (!regularDaySelect.value || !regularFromPeriod.value || !regularToPeriod.value) {
         alertBox.classList.add('d-none');
         return;
@@ -2174,7 +2387,6 @@ function initAddScheduleModal() {
       }
       targetDayKey = convertDateToDayKey(specificDate.value);
     } else {
-      // Với lịch thi: cần chọn Ngày thi và nhập đủ Giờ thi
       if (!specificDate.value || !hourInput.value || !minuteInput.value) {
         alertBox.classList.add('d-none');
         return;
@@ -2182,17 +2394,20 @@ function initAddScheduleModal() {
       targetDayKey = convertDateToDayKey(specificDate.value);
     }
 
-    // Đã chọn đủ thông tin -> Hiển thị hộp kiểm tra và so khớp
     alertBox.classList.remove('d-none');
     const conflicts = [];
 
     schedulesData.forEach(s => {
+      if (editingScheduleId && s.id === editingScheduleId) return;
       if (s.dayKey === targetDayKey && s.type !== 'canceled') {
         if (selectedRoom && s.room === selectedRoom) {
           conflicts.push(`Phòng [${s.room}] đã có lịch "${s.course}" vào khung giờ ${s.timeRange}`);
         }
-        if (selectedTeacher && s.teacher === selectedTeacher) {
-          conflicts.push(`Giảng viên [${s.teacher}] đã có lịch dạy môn "${s.course}"`);
+        if (selectedTeacher && (s.teacher === selectedTeacher || s.teacher2 === selectedTeacher)) {
+          conflicts.push(`Cán bộ [${selectedTeacher}] đã có lịch "${s.course}"`);
+        }
+        if (selectedTeacher2 && (s.teacher === selectedTeacher2 || s.teacher2 === selectedTeacher2)) {
+          conflicts.push(`Giám thị 2 [${selectedTeacher2}] đã có lịch "${s.course}"`);
         }
       }
     });
@@ -2202,7 +2417,9 @@ function initAddScheduleModal() {
       alertIcon.className = 'bi bi-exclamation-triangle-fill text-danger fs-5';
       alertMsg.innerHTML = `<strong>⚠️ CẢNH BÁO TRÙNG LỊCH:</strong> ${conflicts.join(' & ')}! Vui lòng chọn phòng học khác hoặc đổi ngày/ca.`;
       if (submitBtn) {
-        submitBtn.innerHTML = '<i class="bi bi-exclamation-octagon me-1"></i> Vẫn Thêm (Bị Trùng)';
+        submitBtn.innerHTML = editingScheduleId
+          ? '<i class="bi bi-exclamation-octagon me-1"></i> Vẫn Lưu (Bị Trùng)'
+          : '<i class="bi bi-exclamation-octagon me-1"></i> Vẫn Thêm (Bị Trùng)';
         submitBtn.className = 'btn btn-warning px-4 fw-bold shadow-sm text-dark';
       }
     } else {
@@ -2210,15 +2427,17 @@ function initAddScheduleModal() {
       alertIcon.className = 'bi bi-check-circle-fill text-success fs-5';
       const roomText = selectedRoom ? `Phòng [${selectedRoom}]` : 'Phòng học';
       const teacherText = selectedTeacher ? selectedTeacher : 'Giảng viên';
-      alertMsg.innerHTML = `<strong>✅ Trạng thái hợp lệ:</strong> ${roomText} và ${teacherText} đều trống trong khung giờ này, sẵn sàng xếp lịch!`;
+      alertMsg.innerHTML = `<strong>✅ Trạng thái hợp lệ:</strong> ${roomText} và ${teacherText} đều trống trong khung giờ này!`;
       if (submitBtn) {
-        submitBtn.innerHTML = '<i class="bi bi-plus-circle me-1"></i> Thêm Lịch Mới';
+        submitBtn.innerHTML = editingScheduleId
+          ? '<i class="bi bi-check-circle me-1"></i> Lưu Thay Đổi'
+          : '<i class="bi bi-plus-circle me-1"></i> Thêm Lịch Mới';
         submitBtn.className = 'btn btn-primary-custom px-4 fw-bold shadow-sm';
       }
     }
   }
 
-  // 8. Validation toàn diện & Submit Form
+  // 8. Validation toàn diện & Submit Form (Thêm mới + Chỉnh sửa)
   if (form) {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -2240,10 +2459,24 @@ function initAddScheduleModal() {
         invalidEls.push(setFieldError(courseSelect, 'errorCourse', 'Vui lòng chọn Môn học'));
       }
 
-      // 4. Kiểm tra Giảng viên
+      // 4. Kiểm tra Giảng viên / Giám thị 1
       if (!teacherSelect.value) {
-        const msg = currentScheduleType === 'exam' ? 'Vui lòng chọn Cán bộ coi thi / Giám thị' : 'Vui lòng chọn Giảng viên phụ trách';
+        const msg = currentScheduleType === 'exam' ? 'Vui lòng chọn Giám thị 1' : 'Vui lòng chọn Giảng viên phụ trách';
         invalidEls.push(setFieldError(teacherSelect, 'errorTeacher', msg));
+      }
+
+      // 4b. Nếu là Lịch thi -> Bắt buộc Giám thị 2 & không được trùng Giám thị 1
+      if (currentScheduleType === 'exam' && teacher2Select) {
+        if (!teacher2Select.value) {
+          invalidEls.push(setFieldError(teacher2Select, 'errorTeacher2', 'Vui lòng chọn Giám thị 2'));
+        } else if (teacherSelect.value && teacher2Select.value === teacherSelect.value) {
+          invalidEls.push(setFieldError(teacher2Select, 'errorTeacher2', 'Giám thị 2 không được trùng với Giám thị 1'));
+        }
+      }
+
+      // 4c. Kiểm tra Lớp học phần (bắt buộc cho cả 3 loại lịch)
+      if (classSectionSelect && !classSectionSelect.value) {
+        invalidEls.push(setFieldError(classSectionSelect, 'errorClassSection', 'Vui lòng chọn Lớp học phần'));
       }
 
       // 5. Kiểm tra Tòa nhà
@@ -2292,7 +2525,7 @@ function initAddScheduleModal() {
         }
       }
 
-      // Nếu có lỗi -> cuộn modal tới ô lỗi đầu tiên và chặn thêm lịch
+      // Nếu có lỗi -> cuộn modal tới ô lỗi đầu tiên và chặn lưu
       if (invalidEls.length > 0) {
         const firstErr = invalidEls[0];
         if (firstErr) {
@@ -2304,7 +2537,6 @@ function initAddScheduleModal() {
         return false;
       }
 
-      // Tất cả hợp lệ -> Tiến hành thêm lịch vào mảng mock data
       let targetDayKey = 'th4';
       let targetDayLabel = 'Thứ 4';
       let targetPeriods = '';
@@ -2335,12 +2567,13 @@ function initAddScheduleModal() {
         targetTimeRange = getFormattedExamTime();
       }
 
-      const newSchedule = {
-        id: 'SCH_' + Date.now(),
+      const schedulePayload = {
         type: currentScheduleType,
         course: courseSelect.value,
+        classSection: classSectionSelect ? classSectionSelect.value : '',
         dept: deptSelect.options[deptSelect.selectedIndex].text,
         teacher: teacherSelect.value,
+        teacher2: (currentScheduleType === 'exam' && teacher2Select) ? teacher2Select.value : '',
         room: roomSelect.value,
         building: buildingSelect.options[buildingSelect.selectedIndex].text,
         dayKey: targetDayKey,
@@ -2355,16 +2588,26 @@ function initAddScheduleModal() {
         status: currentScheduleType === 'exam' ? 'Sắp thi' : 'Sắp diễn ra'
       };
 
-      schedulesData.unshift(newSchedule);
+      const wasEditing = Boolean(editingScheduleId);
+      if (wasEditing) {
+        const idx = schedulesData.findIndex(s => s.id === editingScheduleId);
+        if (idx !== -1) {
+          schedulesData[idx] = { ...schedulesData[idx], ...schedulePayload };
+        }
+      } else {
+        schedulesData.unshift({
+          id: 'SCH_' + Date.now(),
+          ...schedulePayload
+        });
+      }
 
-      // Chuyển view ngày sang ngày có lịch mới để xem trực quan
+      // Chuyển view ngày sang ngày có lịch mới/đã sửa để xem trực quan
       if (targetDateStr) {
         const p = targetDateStr.split('-');
         syncDateState(new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10)));
       } else if (regularStartDate.value) {
         const p = regularStartDate.value.split('-');
         let d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
-        // Tìm ngày đầu tiên khớp thứ trong tuần từ ngày bắt đầu
         for (let i = 0; i < 7; i++) {
           if (getDayKeyFromDate(d) === targetDayKey) break;
           d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
@@ -2383,11 +2626,10 @@ function initAddScheduleModal() {
         bsModal.hide();
       }
 
-      // Thông báo thành công bằng SweetAlert2
       const typeLabel = currentScheduleType === 'exam' ? 'Lịch thi' : (currentScheduleType === 'makeup_class' ? 'Lịch học bù' : 'Lịch học');
       getSwalBootstrap().fire({
-        title: `Đã thêm ${typeLabel}!`,
-        text: `${newSchedule.course} (${newSchedule.room}) đã được thêm thành công.`,
+        title: wasEditing ? `Đã cập nhật ${typeLabel}!` : `Đã thêm ${typeLabel}!`,
+        text: `${schedulePayload.course} (${schedulePayload.classSection} • ${schedulePayload.room}) đã được lưu thành công.`,
         icon: "success",
         confirmButtonText: "Hoàn tất"
       });

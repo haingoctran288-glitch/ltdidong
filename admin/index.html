@@ -976,13 +976,36 @@
                   <div class="field-error-msg d-none" id="errorCourse"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn Môn học</div>
                 </div>
 
-                <!-- Giảng viên phụ trách / Cán bộ coi thi -->
-                <div class="col-md-12" id="teacherColWrapper">
-                  <label class="form-label small fw-semibold text-secondary" id="modalLabelTeacher">Giảng viên phụ trách <span class="text-danger">*</span></label>
-                  <select class="form-select form-select-custom" id="modalSelectTeacher" disabled>
-                    <option value="" selected disabled>-- Vui lòng chọn Khoa trước --</option>
-                  </select>
-                  <div class="field-error-msg d-none" id="errorTeacher"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn Giảng viên phụ trách</div>
+                <!-- Hàng Giảng viên / 2 Giám thị & Lớp học phần -->
+                <div class="col-12">
+                  <div class="teacher-class-grid" id="teacherClassGrid">
+                    <!-- Cột 1: Giảng viên phụ trách / Giám thị 1 -->
+                    <div id="teacherColWrapper">
+                      <label class="form-label small fw-semibold text-secondary" id="modalLabelTeacher">Giảng viên phụ trách <span class="text-danger">*</span></label>
+                      <select class="form-select form-select-custom" id="modalSelectTeacher" disabled>
+                        <option value="" selected disabled>-- Vui lòng chọn Khoa trước --</option>
+                      </select>
+                      <div class="field-error-msg d-none" id="errorTeacher"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn Giảng viên phụ trách</div>
+                    </div>
+
+                    <!-- Cột 1b (Chỉ hiện khi Lịch thi): Giám thị 2 -->
+                    <div id="proctor2ColWrapper" class="d-none">
+                      <label class="form-label small fw-semibold text-secondary" id="modalLabelTeacher2"><i class="bi bi-shield-check me-1 text-success"></i> Cán bộ coi thi / Giám thị 2 <span class="text-danger">*</span></label>
+                      <select class="form-select form-select-custom" id="modalSelectTeacher2" disabled>
+                        <option value="" selected disabled>-- Vui lòng chọn Khoa trước --</option>
+                      </select>
+                      <div class="field-error-msg d-none" id="errorTeacher2"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn Giám thị 2</div>
+                    </div>
+
+                    <!-- Cột 2: Lớp học phần (chung hàng với Giảng viên cho lịch học/bù, hiện cho cả lịch thi) -->
+                    <div class="class-section-col" id="classSectionColWrapper">
+                      <label class="form-label small fw-semibold text-secondary">Lớp học phần <span class="text-danger">*</span></label>
+                      <select class="form-select form-select-custom" id="modalSelectClassSection" disabled>
+                        <option value="" selected disabled>-- Vui lòng chọn Khoa trước --</option>
+                      </select>
+                      <div class="field-error-msg d-none" id="errorClassSection"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn Lớp học phần</div>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Các trường phụ chỉ hiện khi là Lịch thi -->
@@ -1122,9 +1145,9 @@
                     <label class="form-label small fw-semibold text-secondary">Ca học bù <span class="text-danger">*</span></label>
                     <select class="form-select form-select-custom" id="modalMakeupShift">
                       <option value="" selected disabled>-- Chọn Ca học bù --</option>
-                      <option value="1 - 4|07:30 - 11:30">Sáng: Tiết 1 - 4 (07:30 - 11:30)</option>
-                      <option value="6 - 10|12:30 - 16:30">Chiều: Tiết 6 - 10 (12:30 - 16:30)</option>
-                      <option value="11 - 13|17:30 - 19:45">Tối: Tiết 11 - 13 (17:30 - 19:45)</option>
+                      <option value="1 - 5|07:30 - 11:30">☀️ Sáng: Tiết 1 - 5 (07:30 - 11:30)</option>
+                      <option value="6 - 10|12:30 - 16:30">🌤️ Chiều: Tiết 6 - 10 (12:30 - 16:30)</option>
+                      <option value="11 - 15|17:00 - 20:45">🌙 Tối: Tiết 11 - 15 (17:00 - 20:45)</option>
                     </select>
                     <div class="field-error-msg d-none" id="errorMakeupShift"><i class="bi bi-exclamation-circle-fill"></i> Vui lòng chọn Ca học bù</div>
                   </div>
