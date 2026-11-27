@@ -1127,15 +1127,53 @@ function buildAllPeriodOptionsHTML(placeholderText) {
 }
 
 function buildToPeriodOptionsHTML(fromP, placeholderText = '-- Đến tiết --') {
-  const bounds = getSessionBoundsForPeriod(fromP);
+  const groups = [
+    { label: '☀️ Buổi Sáng (Tiết 1 - 5)', min: 1, max: 5 },
+    { label: '🌤️ Buổi Chiều (Tiết 6 - 10)', min: 6, max: 10 },
+    { label: '🌙 Buổi Tối (Tiết 11 - 15)', min: 11, max: 15 }
+  ];
   let html = `<option value="" selected disabled>${placeholderText}</option>`;
-  html += `<optgroup label="${bounds.label}">`;
-  for (let p = fromP; p <= bounds.max; p++) {
-    const t = PERIOD_TIME_TABLE[p];
-    html += `<option value="${p}">Tiết ${p} (${t.start} - ${t.end})</option>`;
-  }
-  html += `</optgroup>`;
+  groups.forEach(g => {
+    if (fromP <= g.max) {
+      const startP = Math.max(fromP, g.min);
+      html += `<optgroup label="${g.label}">`;
+      for (let p = startP; p <= g.max; p++) {
+        const t = PERIOD_TIME_TABLE[p];
+        html += `<option value="${p}">Tiết ${p} (${t.start} - ${t.end})</option>`;
+      }
+      html += `</optgroup>`;
+    }
+  });
   return html;
+}
+
+// Tự động tách khoảng tiết thành từng ca theo buổi (Sáng 1-5, Chiều 6-10, Tối 11-15)
+function splitPeriodsBySession(fromP, toP) {
+  const fromNum = parseInt(fromP, 10);
+  const toNum = parseInt(toP, 10);
+  if (isNaN(fromNum) || isNaN(toNum) || toNum < fromNum) return [];
+
+  const sessions = [
+    { key: 'morning', name: 'Sáng', min: 1, max: 5 },
+    { key: 'afternoon', name: 'Chiều', min: 6, max: 10 },
+    { key: 'evening', name: 'Tối', min: 11, max: 15 }
+  ];
+
+  const segments = [];
+  sessions.forEach(sess => {
+    const startP = Math.max(fromNum, sess.min);
+    const endP = Math.min(toNum, sess.max);
+    if (startP <= endP) {
+      segments.push({
+        sessionName: sess.name,
+        fromPeriod: startP,
+        toPeriod: endP,
+        periods: `${startP} - ${endP}`,
+        timeRange: `${PERIOD_TIME_TABLE[startP].start} - ${PERIOD_TIME_TABLE[endP].end}`
+      });
+    }
+  });
+  return segments;
 }
 
 // Period calculation helper
@@ -1797,14 +1835,19 @@ function initAddScheduleModal() {
   const regularFromPeriod = document.getElementById('modalRegularFromPeriod');
   const regularToPeriod = document.getElementById('modalRegularToPeriod');
   const regularTimeDisplay = document.getElementById('modalRegularTimeDisplay');
+  const regularSplitNote = document.getElementById('regularSplitNote');
   const regularStartDate = document.getElementById('modalRegularStartDate');
   const regularEndDate = document.getElementById('modalRegularEndDate');
 
   const specificDate = document.getElementById('modalSpecificDate');
   const labelSpecificDate = document.getElementById('labelSpecificDate');
   const groupExamTime = document.getElementById('groupExamTime');
+  const groupMakeupTimeDisplayWrap = document.getElementById('groupMakeupTimeDisplayWrap');
   const groupMakeupTime = document.getElementById('groupMakeupTime');
-  const makeupShiftSelect = document.getElementById('modalMakeupShift');
+  const makeupFromPeriod = document.getElementById('modalMakeupFromPeriod');
+  const makeupToPeriod = document.getElementById('modalMakeupToPeriod');
+  const makeupTimeDisplay = document.getElementById('modalMakeupTimeDisplay');
+  const makeupSplitNote = document.getElementById('makeupSplitNote');
   const hourInput = document.getElementById('examHourInput');
   const minuteInput = document.getElementById('examMinuteInput');
   const previewBadge = document.getElementById('examTimeBadgePreview');
@@ -1860,6 +1903,7 @@ function initAddScheduleModal() {
       timeGroupRegular.classList.add('d-none');
       timeGroupSpecific.classList.remove('d-none');
       if (groupExamTime) groupExamTime.classList.remove('d-none');
+      if (groupMakeupTimeDisplayWrap) groupMakeupTimeDisplayWrap.classList.add('d-none');
       if (groupMakeupTime) groupMakeupTime.classList.add('d-none');
       if (labelSpecificDate) labelSpecificDate.innerHTML = 'Ngày diễn ra thi <span class="text-danger">*</span>';
     } else if (type === 'makeup_class') {
@@ -1871,6 +1915,7 @@ function initAddScheduleModal() {
       timeGroupRegular.classList.add('d-none');
       timeGroupSpecific.classList.remove('d-none');
       if (groupExamTime) groupExamTime.classList.add('d-none');
+      if (groupMakeupTimeDisplayWrap) groupMakeupTimeDisplayWrap.classList.remove('d-none');
       if (groupMakeupTime) groupMakeupTime.classList.remove('d-none');
       if (labelSpecificDate) labelSpecificDate.innerHTML = 'Ngày học bù <span class="text-danger">*</span>';
     } else {
@@ -2022,12 +2067,30 @@ function initAddScheduleModal() {
     }
 
     if (regularTimeDisplay) regularTimeDisplay.value = '-- : --';
-    if (regularStartDate) regularStartDate.value = '';
-    if (regularEndDate) regularEndDate.value = '';
+    setRegularDateISO(regularStartDate, '');
+    setRegularDateISO(regularEndDate, '');
+    syncWeekdayDateInputsState();
+    const pStart = document.getElementById('popupRegularStartDate');
+    const pEnd = document.getElementById('popupRegularEndDate');
+    if (pStart) pStart.classList.remove('show');
+    if (pEnd) pEnd.classList.remove('show');
 
     // F. Reset Thời gian lịch thi & học bù
     if (specificDate) specificDate.value = '';
-    if (makeupShiftSelect) makeupShiftSelect.value = '';
+    if (makeupFromPeriod) {
+      makeupFromPeriod.innerHTML = buildAllPeriodOptionsHTML('-- Từ tiết --');
+      makeupFromPeriod.value = '';
+    }
+    if (makeupToPeriod) {
+      makeupToPeriod.innerHTML = '<option value="" selected disabled>-- Chọn Từ tiết trước --</option>';
+      makeupToPeriod.value = '';
+      makeupToPeriod.disabled = true;
+    }
+    if (makeupTimeDisplay) makeupTimeDisplay.value = '-- : --';
+    if (makeupSplitNote) {
+      makeupSplitNote.innerText = '';
+      makeupSplitNote.classList.add('d-none');
+    }
     if (hourInput) hourInput.value = '';
     if (minuteInput) minuteInput.value = '';
     if (previewBadge) previewBadge.innerText = '--h--';
@@ -2091,6 +2154,7 @@ function initAddScheduleModal() {
     // Đổ thời gian
     if (editType === 'regular_class') {
       if (regularDaySelect && item.dayLabel) regularDaySelect.value = item.dayLabel;
+      syncWeekdayDateInputsState();
       const pMatch = (item.periods || '').match(/(\d+)\s*-\s*(\d+)/);
       if (pMatch) {
         const fromP = parseInt(pMatch[1], 10);
@@ -2107,15 +2171,21 @@ function initAddScheduleModal() {
         if (dParts.length === 2) {
           const sObj = parseVNDateToObj(dParts[0]);
           const eObj = parseVNDateToObj(dParts[1]);
-          if (sObj) regularStartDate.value = toISODate(sObj);
-          if (eObj) regularEndDate.value = toISODate(eObj);
+          if (sObj) setRegularDateISO(regularStartDate, toISODate(sObj));
+          if (eObj) setRegularDateISO(regularEndDate, toISODate(eObj));
         }
       }
     } else if (editType === 'makeup_class') {
       if (specificDate) specificDate.value = item.dateStr || '';
-      if (makeupShiftSelect) {
-        const shiftVal = `${item.periods}|${item.timeRange}`;
-        makeupShiftSelect.value = shiftVal;
+      const pMatch = (item.periods || '').match(/(\d+)\s*-\s*(\d+)/);
+      if (pMatch && makeupFromPeriod && makeupToPeriod) {
+        const fromP = parseInt(pMatch[1], 10);
+        const toP = parseInt(pMatch[2], 10);
+        makeupFromPeriod.value = String(fromP);
+        makeupToPeriod.disabled = false;
+        makeupToPeriod.innerHTML = buildToPeriodOptionsHTML(fromP, '-- Đến tiết --');
+        makeupToPeriod.value = String(toP);
+        if (makeupTimeDisplay) makeupTimeDisplay.value = calculatePeriodTime(fromP, toP);
       }
     } else if (editType === 'exam') {
       if (specificDate) specificDate.value = item.dateStr || '';
@@ -2224,11 +2294,188 @@ function initAddScheduleModal() {
     triggerConflictCheck();
   });
 
-  // 5. Thao tác tuần tự thời gian: Thứ, Từ tiết -> Đến tiết -> Khung giờ
+  // 5. Thao tác tuần tự thời gian: Thứ -> Từ ngày / Đến ngày (Khóa đúng thứ), Từ tiết -> Đến tiết
+  function getTargetJsDayFromLabel(dayLabel) {
+    const map = { 'Chủ Nhật': 0, 'Thứ 2': 1, 'Thứ 3': 2, 'Thứ 4': 3, 'Thứ 5': 4, 'Thứ 6': 5, 'Thứ 7': 6 };
+    return Object.prototype.hasOwnProperty.call(map, dayLabel) ? map[dayLabel] : null;
+  }
+
+  function getRegularDateISO(inputEl) {
+    return (inputEl && inputEl.dataset && inputEl.dataset.iso) ? inputEl.dataset.iso : '';
+  }
+
+  function setRegularDateISO(inputEl, iso) {
+    if (!inputEl) return;
+    inputEl.dataset.iso = iso || '';
+    inputEl.value = iso ? formatVNStandardDate(iso).replace(/-/g, '/') : '';
+  }
+
+  function syncWeekdayDateInputsState() {
+    const dayLabel = regularDaySelect ? regularDaySelect.value : '';
+    const targetJsDay = getTargetJsDayFromLabel(dayLabel);
+
+    [regularStartDate, regularEndDate].forEach(inp => {
+      if (!inp) return;
+      if (targetJsDay === null) {
+        inp.disabled = true;
+        inp.placeholder = '-- Chọn Thứ trước --';
+        setRegularDateISO(inp, '');
+      } else {
+        inp.disabled = false;
+        inp.placeholder = `Chọn ngày (${dayLabel})...`;
+        const curIso = getRegularDateISO(inp);
+        if (curIso) {
+          const p = curIso.split('-');
+          const d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+          if (d.getDay() !== targetJsDay) {
+            setRegularDateISO(inp, '');
+          }
+        }
+      }
+    });
+  }
+
+  function setupWeekdayDatePicker(inputEl, popupEl, errorId, isEndDate) {
+    if (!inputEl || !popupEl) return;
+    let viewYear = 2026;
+    let viewMonth = 10; // 0-indexed (10 = Tháng 11)
+
+    function renderPopup() {
+      const dayLabel = regularDaySelect ? regularDaySelect.value : '';
+      const targetJsDay = getTargetJsDayFromLabel(dayLabel);
+      if (targetJsDay === null) {
+        popupEl.classList.remove('show');
+        return;
+      }
+
+      const selectedIso = getRegularDateISO(inputEl);
+      const minIso = isEndDate ? getRegularDateISO(regularStartDate) : '';
+      const firstDay = new Date(viewYear, viewMonth, 1);
+      const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+      const startOffset = (firstDay.getDay() + 6) % 7; // Mon=0..Sun=6
+      const dowLabels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+      const dowJsMap = [1, 2, 3, 4, 5, 6, 0];
+
+      let html = `
+        <div class="wdp-header">
+          <button type="button" class="wdp-nav-btn" data-wdp-nav="-1"><i class="bi bi-chevron-left"></i></button>
+          <div class="text-center">
+            <div class="fw-bold text-dark" style="font-size: 0.88rem;">Tháng ${viewMonth + 1}, ${viewYear}</div>
+            <span class="badge bg-primary-subtle text-primary" style="font-size: 0.7rem;">Chỉ chọn ${dayLabel}</span>
+          </div>
+          <button type="button" class="wdp-nav-btn" data-wdp-nav="1"><i class="bi bi-chevron-right"></i></button>
+        </div>
+        <div class="wdp-grid">
+          ${dowLabels.map((lbl, idx) => `<div class="wdp-dow ${dowJsMap[idx] === targetJsDay ? 'allowed' : ''}">${lbl}</div>`).join('')}
+      `;
+
+      for (let i = 0; i < startOffset; i++) {
+        html += '<div></div>';
+      }
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const cellDate = new Date(viewYear, viewMonth, d);
+        const cellIso = toISODate(cellDate);
+        const matchesWeekday = cellDate.getDay() === targetJsDay;
+        const meetsMin = !minIso || cellIso >= minIso;
+        const isEnabled = matchesWeekday && meetsMin;
+        const isSelected = cellIso === selectedIso;
+
+        html += `<button type="button" class="wdp-day ${isSelected ? 'selected' : ''}" data-wdp-iso="${cellIso}" ${isEnabled ? '' : 'disabled'}>${d}</button>`;
+      }
+
+      html += '</div>';
+      popupEl.innerHTML = html;
+
+      popupEl.querySelectorAll('.wdp-nav-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const delta = parseInt(btn.getAttribute('data-wdp-nav'), 10);
+          const nextD = new Date(viewYear, viewMonth + delta, 1);
+          viewYear = nextD.getFullYear();
+          viewMonth = nextD.getMonth();
+          renderPopup();
+        });
+      });
+
+      popupEl.querySelectorAll('.wdp-day:not(:disabled)').forEach(dayBtn => {
+        dayBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const chosenIso = dayBtn.getAttribute('data-wdp-iso');
+          setRegularDateISO(inputEl, chosenIso);
+          clearFieldError(inputEl, errorId);
+          popupEl.classList.remove('show');
+
+          if (!isEndDate) {
+            const endIso = getRegularDateISO(regularEndDate);
+            if (endIso && endIso < chosenIso) {
+              setRegularDateISO(regularEndDate, '');
+            }
+          } else {
+            const startIso = getRegularDateISO(regularStartDate);
+            if (startIso && chosenIso < startIso) {
+              setFieldError(regularEndDate, 'errorRegularEnd', 'Ngày kết thúc phải sau hoặc bằng ngày bắt đầu');
+            } else {
+              clearFieldError(regularEndDate, 'errorRegularEnd');
+            }
+          }
+        });
+      });
+    }
+
+    inputEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (inputEl.disabled) return;
+
+      document.querySelectorAll('.weekday-datepicker-popup').forEach(p => {
+        if (p !== popupEl) p.classList.remove('show');
+      });
+
+      const curIso = getRegularDateISO(inputEl) || (isEndDate ? getRegularDateISO(regularStartDate) : '');
+      if (curIso) {
+        const p = curIso.split('-');
+        viewYear = parseInt(p[0], 10);
+        viewMonth = parseInt(p[1], 10) - 1;
+      } else {
+        viewYear = 2026;
+        viewMonth = 10;
+      }
+
+      renderPopup();
+      popupEl.classList.toggle('show');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!popupEl.contains(e.target) && e.target !== inputEl) {
+        popupEl.classList.remove('show');
+      }
+    });
+  }
+
+  setupWeekdayDatePicker(regularStartDate, document.getElementById('popupRegularStartDate'), 'errorRegularStart', false);
+  setupWeekdayDatePicker(regularEndDate, document.getElementById('popupRegularEndDate'), 'errorRegularEnd', true);
+
   regularDaySelect.addEventListener('change', () => {
     clearFieldError(regularDaySelect, 'errorRegularDay');
+    syncWeekdayDateInputsState();
     triggerConflictCheck();
   });
+
+  function updatePeriodSelectionPreview(fromSelect, toSelect, timeInput) {
+    const fromVal = parseInt(fromSelect ? fromSelect.value : '', 10);
+    const toVal = parseInt(toSelect ? toSelect.value : '', 10);
+
+    if (!isNaN(fromVal) && !isNaN(toVal) && toVal >= fromVal) {
+      const segments = splitPeriodsBySession(fromVal, toVal);
+      if (segments.length <= 1) {
+        if (timeInput) timeInput.value = calculatePeriodTime(fromVal, toVal);
+      } else {
+        if (timeInput) timeInput.value = segments.map(s => `${s.periods} (${s.timeRange})`).join(' | ');
+      }
+    } else {
+      if (timeInput) timeInput.value = '-- : --';
+    }
+  }
 
   regularFromPeriod.addEventListener('change', () => {
     clearFieldError(regularFromPeriod, 'errorRegularFrom');
@@ -2238,57 +2485,52 @@ function initAddScheduleModal() {
       regularToPeriod.disabled = true;
       regularToPeriod.innerHTML = '<option value="" selected disabled>-- Chọn Từ tiết trước --</option>';
       regularToPeriod.value = '';
-      regularTimeDisplay.value = '-- : --';
     } else {
       regularToPeriod.disabled = false;
       regularToPeriod.innerHTML = buildToPeriodOptionsHTML(fromVal, '-- Đến tiết --');
       regularToPeriod.value = '';
-      regularTimeDisplay.value = '-- : --';
       clearFieldError(regularToPeriod, 'errorRegularTo');
     }
 
+    updatePeriodSelectionPreview(regularFromPeriod, regularToPeriod, regularTimeDisplay);
     triggerConflictCheck();
   });
 
   regularToPeriod.addEventListener('change', () => {
     clearFieldError(regularToPeriod, 'errorRegularTo');
-    const fromVal = parseInt(regularFromPeriod.value, 10);
-    const toVal = parseInt(regularToPeriod.value, 10);
-
-    if (!isNaN(fromVal) && !isNaN(toVal)) {
-      regularTimeDisplay.value = calculatePeriodTime(fromVal, toVal);
-    } else {
-      regularTimeDisplay.value = '-- : --';
-    }
-
+    updatePeriodSelectionPreview(regularFromPeriod, regularToPeriod, regularTimeDisplay);
     triggerConflictCheck();
   });
 
-  regularStartDate.addEventListener('change', () => {
-    clearFieldError(regularStartDate, 'errorRegularStart');
-    if (regularEndDate.value && regularStartDate.value && regularEndDate.value < regularStartDate.value) {
-      setFieldError(regularEndDate, 'errorRegularEnd', 'Ngày kết thúc phải sau hoặc bằng ngày bắt đầu');
-    } else {
-      clearFieldError(regularEndDate, 'errorRegularEnd');
-    }
-  });
-
-  regularEndDate.addEventListener('change', () => {
-    clearFieldError(regularEndDate, 'errorRegularEnd');
-    if (regularEndDate.value && regularStartDate.value && regularEndDate.value < regularStartDate.value) {
-      setFieldError(regularEndDate, 'errorRegularEnd', 'Ngày kết thúc phải sau hoặc bằng ngày bắt đầu');
-    }
-  });
-
-  // 6. Nhập giờ thi (Lịch thi) & Ca học bù
+  // 6. Nhập giờ thi (Lịch thi) & Từ tiết -> Đến tiết (Lịch học bù)
   specificDate.addEventListener('change', () => {
     clearFieldError(specificDate, 'errorSpecificDate');
     triggerConflictCheck();
   });
 
-  if (makeupShiftSelect) {
-    makeupShiftSelect.addEventListener('change', () => {
-      clearFieldError(makeupShiftSelect, 'errorMakeupShift');
+  if (makeupFromPeriod && makeupToPeriod) {
+    makeupFromPeriod.addEventListener('change', () => {
+      clearFieldError(makeupFromPeriod, 'errorMakeupFrom');
+      const fromVal = parseInt(makeupFromPeriod.value, 10);
+
+      if (isNaN(fromVal)) {
+        makeupToPeriod.disabled = true;
+        makeupToPeriod.innerHTML = '<option value="" selected disabled>-- Chọn Từ tiết trước --</option>';
+        makeupToPeriod.value = '';
+      } else {
+        makeupToPeriod.disabled = false;
+        makeupToPeriod.innerHTML = buildToPeriodOptionsHTML(fromVal, '-- Đến tiết --');
+        makeupToPeriod.value = '';
+        clearFieldError(makeupToPeriod, 'errorMakeupTo');
+      }
+
+      updatePeriodSelectionPreview(makeupFromPeriod, makeupToPeriod, makeupTimeDisplay);
+      triggerConflictCheck();
+    });
+
+    makeupToPeriod.addEventListener('change', () => {
+      clearFieldError(makeupToPeriod, 'errorMakeupTo');
+      updatePeriodSelectionPreview(makeupFromPeriod, makeupToPeriod, makeupTimeDisplay);
       triggerConflictCheck();
     });
   }
@@ -2381,7 +2623,7 @@ function initAddScheduleModal() {
       }
       targetDayKey = convertDayNameToKey(regularDaySelect.value);
     } else if (currentScheduleType === 'makeup_class') {
-      if (!specificDate.value || !makeupShiftSelect || !makeupShiftSelect.value) {
+      if (!specificDate.value || !makeupFromPeriod || !makeupFromPeriod.value || !makeupToPeriod || !makeupToPeriod.value) {
         alertBox.classList.add('d-none');
         return;
       }
@@ -2500,20 +2742,25 @@ function initAddScheduleModal() {
         if (!regularToPeriod.value) {
           invalidEls.push(setFieldError(regularToPeriod, 'errorRegularTo', 'Vui lòng chọn Đến tiết'));
         }
-        if (!regularStartDate.value) {
+        const startIsoVal = getRegularDateISO(regularStartDate);
+        const endIsoVal = getRegularDateISO(regularEndDate);
+        if (!startIsoVal) {
           invalidEls.push(setFieldError(regularStartDate, 'errorRegularStart', 'Vui lòng chọn ngày bắt đầu'));
         }
-        if (!regularEndDate.value) {
+        if (!endIsoVal) {
           invalidEls.push(setFieldError(regularEndDate, 'errorRegularEnd', 'Vui lòng chọn ngày kết thúc'));
-        } else if (regularStartDate.value && regularEndDate.value < regularStartDate.value) {
+        } else if (startIsoVal && endIsoVal < startIsoVal) {
           invalidEls.push(setFieldError(regularEndDate, 'errorRegularEnd', 'Ngày kết thúc phải sau hoặc bằng ngày bắt đầu'));
         }
       } else if (currentScheduleType === 'makeup_class') {
         if (!specificDate.value) {
           invalidEls.push(setFieldError(specificDate, 'errorSpecificDate', 'Vui lòng chọn Ngày học bù'));
         }
-        if (makeupShiftSelect && !makeupShiftSelect.value) {
-          invalidEls.push(setFieldError(makeupShiftSelect, 'errorMakeupShift', 'Vui lòng chọn Ca học bù'));
+        if (makeupFromPeriod && !makeupFromPeriod.value) {
+          invalidEls.push(setFieldError(makeupFromPeriod, 'errorMakeupFrom', 'Vui lòng chọn Từ tiết'));
+        }
+        if (makeupToPeriod && !makeupToPeriod.value) {
+          invalidEls.push(setFieldError(makeupToPeriod, 'errorMakeupTo', 'Vui lòng chọn Đến tiết'));
         }
       } else if (currentScheduleType === 'exam') {
         if (!specificDate.value) {
@@ -2539,35 +2786,30 @@ function initAddScheduleModal() {
 
       let targetDayKey = 'th4';
       let targetDayLabel = 'Thứ 4';
-      let targetPeriods = '';
-      let targetTimeRange = '';
       let targetDateStr = '';
       let targetDateRange = '';
+      let periodSegments = [];
 
       if (currentScheduleType === 'regular_class') {
         targetDayKey = convertDayNameToKey(regularDaySelect.value);
         targetDayLabel = regularDaySelect.value;
-        targetPeriods = `${regularFromPeriod.value} - ${regularToPeriod.value}`;
-        targetTimeRange = regularTimeDisplay.value;
-        const startFormatted = formatVNStandardDate(regularStartDate.value);
-        const endFormatted = formatVNStandardDate(regularEndDate.value);
+        const startFormatted = formatVNStandardDate(getRegularDateISO(regularStartDate));
+        const endFormatted = formatVNStandardDate(getRegularDateISO(regularEndDate));
         targetDateRange = (startFormatted && endFormatted) ? `${startFormatted} đến ${endFormatted}` : '';
+        periodSegments = splitPeriodsBySession(regularFromPeriod.value, regularToPeriod.value);
       } else if (currentScheduleType === 'makeup_class') {
         targetDateStr = specificDate.value;
         targetDayKey = convertDateToDayKey(targetDateStr);
         targetDayLabel = convertDayKeyToLabel(targetDayKey);
-        const shiftParts = (makeupShiftSelect && makeupShiftSelect.value) ? makeupShiftSelect.value.split('|') : ['1 - 4', '07:30 - 11:30'];
-        targetPeriods = shiftParts[0];
-        targetTimeRange = shiftParts[1];
+        periodSegments = splitPeriodsBySession(makeupFromPeriod.value, makeupToPeriod.value);
       } else {
         targetDateStr = specificDate.value;
         targetDayKey = convertDateToDayKey(targetDateStr);
         targetDayLabel = convertDayKeyToLabel(targetDayKey);
-        targetPeriods = 'Ca thi';
-        targetTimeRange = getFormattedExamTime();
+        periodSegments = [{ periods: 'Ca thi', timeRange: getFormattedExamTime() }];
       }
 
-      const schedulePayload = {
+      const basePayload = {
         type: currentScheduleType,
         course: courseSelect.value,
         classSection: classSectionSelect ? classSectionSelect.value : '',
@@ -2579,8 +2821,6 @@ function initAddScheduleModal() {
         dayKey: targetDayKey,
         dayLabel: targetDayLabel,
         dateStr: targetDateStr,
-        periods: targetPeriods,
-        timeRange: targetTimeRange,
         dateRange: targetDateRange,
         examFormat: document.getElementById('modalExamFormat') ? document.getElementById('modalExamFormat').value : '',
         examDuration: document.getElementById('modalExamDuration') ? document.getElementById('modalExamDuration').value : '',
@@ -2588,25 +2828,44 @@ function initAddScheduleModal() {
         status: currentScheduleType === 'exam' ? 'Sắp thi' : 'Sắp diễn ra'
       };
 
+      const builtRecords = periodSegments.map((seg, idx) => ({
+        ...basePayload,
+        periods: seg.periods,
+        timeRange: seg.timeRange,
+        _segIdx: idx
+      }));
+
       const wasEditing = Boolean(editingScheduleId);
       if (wasEditing) {
         const idx = schedulesData.findIndex(s => s.id === editingScheduleId);
-        if (idx !== -1) {
-          schedulesData[idx] = { ...schedulesData[idx], ...schedulePayload };
+        if (idx !== -1 && builtRecords.length > 0) {
+          const firstRec = { ...builtRecords[0] };
+          delete firstRec._segIdx;
+          schedulesData[idx] = { ...schedulesData[idx], ...firstRec };
+          // Nếu khi sửa chọn xuyên buổi -> chèn thêm các ca còn lại
+          for (let i = builtRecords.length - 1; i >= 1; i--) {
+            const extra = { ...builtRecords[i] };
+            delete extra._segIdx;
+            schedulesData.splice(idx + 1, 0, { id: 'SCH_' + (Date.now() + i), ...extra });
+          }
         }
       } else {
-        schedulesData.unshift({
-          id: 'SCH_' + Date.now(),
-          ...schedulePayload
-        });
+        for (let i = builtRecords.length - 1; i >= 0; i--) {
+          const rec = { ...builtRecords[i] };
+          delete rec._segIdx;
+          schedulesData.unshift({
+            id: 'SCH_' + (Date.now() + i),
+            ...rec
+          });
+        }
       }
 
       // Chuyển view ngày sang ngày có lịch mới/đã sửa để xem trực quan
       if (targetDateStr) {
         const p = targetDateStr.split('-');
         syncDateState(new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10)));
-      } else if (regularStartDate.value) {
-        const p = regularStartDate.value.split('-');
+      } else if (getRegularDateISO(regularStartDate)) {
+        const p = getRegularDateISO(regularStartDate).split('-');
         let d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
         for (let i = 0; i < 7; i++) {
           if (getDayKeyFromDate(d) === targetDayKey) break;
@@ -2627,9 +2886,12 @@ function initAddScheduleModal() {
       }
 
       const typeLabel = currentScheduleType === 'exam' ? 'Lịch thi' : (currentScheduleType === 'makeup_class' ? 'Lịch học bù' : 'Lịch học');
+      const splitInfo = builtRecords.length > 1
+        ? ` (Đã tự động tách thành ${builtRecords.length} ca: ${builtRecords.map(r => `Tiết ${r.periods}`).join(' & ')})`
+        : '';
       getSwalBootstrap().fire({
         title: wasEditing ? `Đã cập nhật ${typeLabel}!` : `Đã thêm ${typeLabel}!`,
-        text: `${schedulePayload.course} (${schedulePayload.classSection} • ${schedulePayload.room}) đã được lưu thành công.`,
+        text: `${basePayload.course} (${basePayload.classSection} • ${basePayload.room})${splitInfo} đã được lưu thành công.`,
         icon: "success",
         confirmButtonText: "Hoàn tất"
       });

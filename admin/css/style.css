@@ -1155,6 +1155,110 @@ body {
   }
 }
 
+/* Custom Weekday-Locked Date Picker Popup */
+.weekday-date-input {
+  cursor: pointer;
+  background-color: #ffffff !important;
+}
+
+.weekday-date-input:disabled {
+  cursor: not-allowed;
+  background-color: #e9ecef !important;
+}
+
+.weekday-datepicker-popup {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  width: 292px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 20px 40px -10px rgba(15, 23, 42, 0.22), 0 4px 12px rgba(15, 23, 42, 0.08);
+  padding: 14px;
+  z-index: 1095;
+  display: none;
+}
+
+.weekday-datepicker-popup.show {
+  display: block;
+  animation: fadeInDown 0.16s ease;
+}
+
+.wdp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.wdp-nav-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--slate-200);
+  background: #ffffff;
+  color: var(--dark);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.wdp-nav-btn:hover {
+  background: var(--slate-100);
+}
+
+.wdp-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  text-align: center;
+}
+
+.wdp-dow {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--slate-500);
+  padding: 4px 0;
+}
+
+.wdp-dow.allowed {
+  color: #4f46e5;
+  background: #eef2ff;
+  border-radius: 6px;
+}
+
+.wdp-day {
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--dark);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wdp-day:hover:not(:disabled) {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.wdp-day.selected {
+  background: #4f46e5 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.35);
+}
+
+.wdp-day:disabled {
+  color: #cbd5e1;
+  background: transparent;
+  cursor: not-allowed;
+  font-weight: 400;
+}
+
 /* Mobile responsive */
 @media (max-width: 991px) {
   .sidebar {
